@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caja de Ahorro Estadística</title>
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Toastify -->
+  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- html2pdf -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <!-- Login View -->
+  <div id="login-view" class="flex items-center justify-center h-screen">
+    <form id="login-form" class="bg-white p-8 rounded shadow-md w-80">
+      <img src="assets/logo.png" alt="Logo" class="w-24 mx-auto mb-4" />
+      <h1 class="text-xl font-bold text-center mb-4">Iniciar sesión</h1>
+      <input id="email" type="email" placeholder="Correo" class="w-full p-2 mb-3 border rounded" required />
+      <input id="password" type="password" placeholder="Contraseña" class="w-full p-2 mb-3 border rounded" required />
+      <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded">Ingresar</button>
+      <p id="login-error" class="text-red-600 text-sm mt-2 hidden"></p>
+    </form>
+  </div>
+
+  <!-- App View -->
+  <div id="app" class="hidden">
+    <nav class="bg-white shadow p-4 flex justify-between items-center">
+      <div class="flex items-center space-x-2">
+        <img src="assets/logo.png" alt="Logo" class="w-8" />
+        <span class="font-semibold">Caja de Ahorro Estadística</span>
+      </div>
+      <div class="space-x-4">
+        <a href="#/dashboard" class="hover:underline">Dashboard</a>
+        <a href="#/usuarios" class="hover:underline">Usuarios</a>
+        <a href="#/pagos" class="hover:underline">Pagos</a>
+        <a href="#/egresos" class="hover:underline">Egresos</a>
+        <a href="#/estado" class="hover:underline">Estado de cuenta</a>
+        <button id="logout" class="ml-4 bg-red-500 text-white px-3 py-1 rounded">Salir</button>
+      </div>
+    </nav>
+
+    <main class="p-4">
+      <!-- Dashboard -->
+      <section id="view-dashboard" class="view hidden">
+        <h2 class="text-2xl font-bold mb-4">Dashboard</h2>
+        <div class="grid md:grid-cols-3 gap-4">
+          <div class="p-4 bg-white rounded shadow">
+            <p class="text-gray-600">Ingresos</p>
+            <p id="total-ingresos" class="text-2xl font-bold">$0</p>
+          </div>
+          <div class="p-4 bg-white rounded shadow">
+            <p class="text-gray-600">Egresos</p>
+            <p id="total-egresos" class="text-2xl font-bold">$0</p>
+          </div>
+          <div class="p-4 bg-white rounded shadow">
+            <p class="text-gray-600">Saldo</p>
+            <p id="saldo" class="text-2xl font-bold">$0</p>
+          </div>
+        </div>
+        <canvas id="chart" class="mt-8"></canvas>
+        <div class="mt-8">
+          <h3 class="font-semibold mb-2">Próximos cumpleaños</h3>
+          <ul id="cumples" class="list-disc ml-6"></ul>
+        </div>
+      </section>
+
+      <!-- Usuarios -->
+      <section id="view-usuarios" class="view hidden">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-2xl font-bold">Integrantes</h2>
+          <button id="btn-add-usuario" class="bg-blue-600 text-white px-3 py-1 rounded hidden">Agregar</button>
+        </div>
+        <table class="min-w-full bg-white">
+          <thead>
+            <tr>
+              <th class="py-2">Nombre</th>
+              <th class="py-2">Correo</th>
+              <th class="py-2">Rol</th>
+              <th class="py-2">Activo</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-usuarios"></tbody>
+        </table>
+      </section>
+
+      <!-- Pagos -->
+      <section id="view-pagos" class="view hidden">
+        <h2 class="text-2xl font-bold mb-4">Pagos</h2>
+        <div id="form-pago" class="mb-4 hidden">
+          <select id="pago-integrante" class="border p-2 mr-2"></select>
+          <input id="pago-quincena" type="text" placeholder="YYYY-Q##" class="border p-2 mr-2" />
+          <input id="pago-fecha" type="date" class="border p-2 mr-2" />
+          <input id="pago-monto" type="number" class="border p-2 mr-2 w-24" />
+          <button id="guardar-pago" class="bg-green-600 text-white px-3 py-1 rounded">Guardar</button>
+        </div>
+        <table class="min-w-full bg-white">
+          <thead>
+            <tr>
+              <th class="py-2">Integrante</th>
+              <th class="py-2">Quincena</th>
+              <th class="py-2">Fecha</th>
+              <th class="py-2">Monto</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-pagos"></tbody>
+        </table>
+      </section>
+
+      <!-- Egresos -->
+      <section id="view-egresos" class="view hidden">
+        <h2 class="text-2xl font-bold mb-4">Egresos</h2>
+        <div id="form-egreso" class="mb-4 hidden">
+          <input id="egreso-fecha" type="date" class="border p-2 mr-2" />
+          <input id="egreso-concepto" type="text" placeholder="Concepto" class="border p-2 mr-2" />
+          <input id="egreso-monto" type="number" class="border p-2 mr-2 w-24" />
+          <input id="egreso-detalle" type="text" placeholder="Detalle" class="border p-2 mr-2" />
+          <button id="guardar-egreso" class="bg-green-600 text-white px-3 py-1 rounded">Guardar</button>
+        </div>
+        <table class="min-w-full bg-white">
+          <thead>
+            <tr>
+              <th class="py-2">Fecha</th>
+              <th class="py-2">Concepto</th>
+              <th class="py-2">Monto</th>
+              <th class="py-2">Detalle</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-egresos"></tbody>
+        </table>
+      </section>
+
+      <!-- Estado de Cuenta -->
+      <section id="view-estado" class="view hidden">
+        <h2 class="text-2xl font-bold mb-4">Estado de cuenta</h2>
+        <div class="mb-4">
+          <select id="estado-integrante" class="border p-2"></select>
+          <button id="btn-exportar" class="ml-2 bg-blue-600 text-white px-3 py-1 rounded">Exportar PDF</button>
+        </div>
+        <div id="estado-detalle" class="bg-white p-4 rounded shadow"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Firebase & App -->
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
