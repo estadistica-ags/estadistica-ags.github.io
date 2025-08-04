@@ -8,11 +8,13 @@ import {
   collection,
   addDoc,
   getDocs,
+  getDoc,
   query,
   where,
   orderBy,
   doc,
-  updateDoc
+  updateDoc,
+  deleteDoc
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 // Helpers
@@ -24,6 +26,12 @@ const toast = msg => {
 const handleError = (err, msg) => {
   console.error(err);
   if (msg) toast(msg);
+};
+
+const formatDate = iso => {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
 };
 
 // Views
@@ -41,6 +49,14 @@ const menuClose = document.getElementById('menu-close');
 
 let currentUser = null;
 let currentRole = 'consulta';
+
+// Modal elements for gestión de integrantes
+const modalUsuario = document.getElementById('modal-usuario');
+const modalTitle = document.getElementById('modal-title');
+const modalClose = document.getElementById('modal-close');
+const formUsuario = document.getElementById('form-usuario');
+const btnAddUsuario = document.getElementById('btn-add-usuario');
+let editingId = null;
 
 // Routing
 function navigate() {
@@ -90,11 +106,10 @@ onAuthStateChanged(auth, async user => {
 
 async function loadRole() {
   try {
-    const q = query(collection(db, 'integrantes'), where('email', '==', currentUser.email));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const data = snap.docs[0].data();
-      currentRole = data.rol;
+    const snap = await getDoc(doc(db, 'usuarios', currentUser.uid));
+    if (snap.exists()) {
+      const data = snap.data();
+      currentRole = data.rol || 'consulta';
     }
   } catch (err) {
     handleError(err, 'No se pudo cargar el rol del usuario');
@@ -123,30 +138,90 @@ function setupForms() {
   }
 }
 
+function openUsuarioModal(data = null) {
+  modalUsuario.classList.remove('hidden');
+  if (data) {
+    editingId = data.id;
+    modalTitle.textContent = 'Editar Integrante';
+    document.getElementById('usuario-nombre').value = data.nombre || '';
+    document.getElementById('usuario-email').value = data.email || '';
+    document.getElementById('usuario-rol').value = data.rol || '';
+    document.getElementById('usuario-activo').value = data.activo ? 'true' : 'false';
+    document.getElementById('usuario-cumple').value = data.cumple || '';
+  } else {
+    editingId = null;
+    modalTitle.textContent = 'Agregar Integrante';
+    formUsuario.reset();
+  }
+}
+
+function closeUsuarioModal() {
+  modalUsuario.classList.add('hidden');
+  formUsuario.reset();
+}
+
+btnAddUsuario?.addEventListener('click', () => openUsuarioModal());
+modalClose?.addEventListener('click', closeUsuarioModal);
+modalUsuario?.addEventListener('click', e => {
+  if (e.target === modalUsuario) closeUsuarioModal();
+});
+
+formUsuario?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const nombre = document.getElementById('usuario-nombre').value.trim();
+  const email = document.getElementById('usuario-email').value.trim();
+  const rol = document.getElementById('usuario-rol').value;
+  const activo = document.getElementById('usuario-activo').value;
+  const cumple = document.getElementById('usuario-cumple').value;
+  if (!nombre || !email || !rol || !activo || !cumple) return toast('Datos incompletos');
+  const data = { nombre, email, rol, activo: activo === 'true', cumple };
+  try {
+    if (editingId) {
+      await updateDoc(doc(db, 'integrantes', editingId), data);
+      toast('Integrante actualizado');
+    } else {
+      await addDoc(collection(db, 'integrantes'), data);
+      toast('Integrante agregado');
+    }
+    closeUsuarioModal();
+    loadUsuarios();
+    loadCumples();
+  } catch (err) {
+    handleError(err, 'No se pudo guardar el integrante');
+  }
+});
+
 // Usuarios
 async function loadUsuarios() {
   try {
     const tbody = document.getElementById('tabla-usuarios');
     tbody.innerHTML = '';
     const snap = await getDocs(collection(db, 'integrantes'));
-    snap.forEach(doc => {
-      const d = doc.data();
+    snap.forEach(docu => {
+      const d = docu.data();
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="border px-2 py-1">${d.nombre}</td>
-                      <td class="border px-2 py-1">${d.email}</td>
-                      <td class="border px-2 py-1">${d.rol}</td>
-                      <td class="border px-2 py-1">${d.activo ? 'Sí' : 'No'}</td>` +
-                      (currentRole === 'admin' ? `<td class="border px-2 py-1"><button class="edit-usuario text-blue-600" data-id="${doc.id}" data-nombre="${d.nombre}" data-email="${d.email}" data-rol="${d.rol}" data-activo="${d.activo}">Editar</button></td>` : '');
+      tr.className = 'border-b odd:bg-white even:bg-gray-50';
+      tr.innerHTML = `
+        <td class="px-4 py-2">${d.nombre}</td>
+        <td class="px-4 py-2">${d.email}</td>
+        <td class="px-4 py-2">${d.rol}</td>
+        <td class="px-4 py-2">${d.activo ? 'Sí' : 'No'}</td>
+        <td class="px-4 py-2">${formatDate(d.cumple)}</td>
+        ${currentRole === 'admin' ? `<td class="px-4 py-2 space-x-2">
+            <button class="edit-usuario" data-id="${docu.id}" data-nombre="${d.nombre}" data-email="${d.email}" data-rol="${d.rol}" data-activo="${d.activo}" data-cumple="${d.cumple}">✏️</button>
+            <button class="delete-usuario" data-id="${docu.id}">🗑️</button>
+          </td>` : ''}
+      `;
       tbody.appendChild(tr);
     });
     const selPago = document.getElementById('pago-integrante');
     const selEstado = document.getElementById('estado-integrante');
-    selPago.innerHTML = '<option value="">Integrante</option>';
-    selEstado.innerHTML = '';
-    snap.forEach(doc => {
-      const d = doc.data();
-      selPago.innerHTML += `<option value="${doc.id}">${d.nombre}</option>`;
-      selEstado.innerHTML += `<option value="${doc.id}">${d.nombre}</option>`;
+    if (selPago) selPago.innerHTML = '<option value="">Integrante</option>';
+    if (selEstado) selEstado.innerHTML = '';
+    snap.forEach(docu => {
+      const d = docu.data();
+      if (selPago) selPago.innerHTML += `<option value="${docu.id}">${d.nombre}</option>`;
+      if (selEstado) selEstado.innerHTML += `<option value="${docu.id}">${d.nombre}</option>`;
     });
   } catch (err) {
     handleError(err, 'No se pudieron cargar los usuarios');
@@ -154,19 +229,26 @@ async function loadUsuarios() {
 }
 
 document.getElementById('tabla-usuarios')?.addEventListener('click', async e => {
-  if (e.target.classList.contains('edit-usuario')) {
-    const { id, nombre, email, rol, activo } = e.target.dataset;
-    const nuevoNombre = prompt('Nombre', nombre);
-    if (nuevoNombre === null) return;
-    const nuevoEmail = prompt('Correo', email) || email;
-    const nuevoRol = prompt('Rol', rol) || rol;
-    const nuevoActivo = confirm(`¿Activo? (Actual: ${activo === 'true' ? 'Sí' : 'No'})`);
-    try {
-      await updateDoc(doc(db, 'integrantes', id), { nombre: nuevoNombre, email: nuevoEmail, rol: nuevoRol, activo: nuevoActivo });
-      toast('Usuario actualizado');
-      loadUsuarios();
-    } catch (err) {
-      handleError(err, 'No se pudo actualizar el usuario');
+  const target = e.target;
+  if (target.classList.contains('edit-usuario')) {
+    openUsuarioModal({
+      id: target.dataset.id,
+      nombre: target.dataset.nombre,
+      email: target.dataset.email,
+      rol: target.dataset.rol,
+      activo: target.dataset.activo === 'true',
+      cumple: target.dataset.cumple
+    });
+  } else if (target.classList.contains('delete-usuario')) {
+    if (confirm('¿Eliminar integrante?')) {
+      try {
+        await deleteDoc(doc(db, 'integrantes', target.dataset.id));
+        toast('Integrante eliminado');
+        loadUsuarios();
+        loadCumples();
+      } catch (err) {
+        handleError(err, 'No se pudo eliminar el integrante');
+      }
     }
   }
 });
@@ -291,8 +373,8 @@ async function loadCumples() {
     const proximos = [];
     snap.forEach(d => {
       const data = d.data();
-      if (!data.fechaNacimiento) return;
-      const [year, month, day] = data.fechaNacimiento.split('-').map(n => parseInt(n));
+      if (!data.cumple) return;
+      const [year, month, day] = data.cumple.split('-').map(n => parseInt(n));
       let cumple = new Date(hoy.getFullYear(), month - 1, day);
       if (cumple < hoy) cumple.setFullYear(hoy.getFullYear() + 1);
       proximos.push({ nombre: data.nombre, fecha: cumple });
@@ -300,7 +382,7 @@ async function loadCumples() {
     proximos.sort((a, b) => a.fecha - b.fecha);
     proximos.slice(0, 5).forEach(c => {
       const li = document.createElement('li');
-      li.textContent = `${c.nombre} - ${c.fecha.toISOString().slice(0,10)}`;
+      li.textContent = `${c.nombre} - ${formatDate(c.fecha.toISOString().slice(0,10))}`;
       ul.appendChild(li);
     });
   } catch (err) {
