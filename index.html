@@ -97,23 +97,55 @@
 
       <!-- Usuarios -->
       <section id="view-usuarios" class="view hidden">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-2xl font-bold">Integrantes</h2>
-          <button id="btn-add-usuario" class="bg-blue-600 text-white px-3 py-1 rounded hidden">Agregar</button>
+        <div class="max-w-4xl mx-auto">
+          <div class="bg-white shadow rounded-lg p-4">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-2xl font-bold">Integrantes</h2>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full">
+                <thead class="bg-gray-100">
+                  <tr>
+                    <th class="px-4 py-2 text-left">Nombre</th>
+                    <th class="px-4 py-2 text-left">Correo</th>
+                    <th class="px-4 py-2 text-left">Rol</th>
+                    <th class="px-4 py-2 text-left">Activo</th>
+                    <th class="px-4 py-2 text-left">Cumpleaños</th>
+                    <th id="usuarios-acciones" class="px-4 py-2 text-left hidden">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tabla-usuarios"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
-        <table class="min-w-full bg-white">
-          <thead>
-            <tr>
-              <th class="py-2">Nombre</th>
-              <th class="py-2">Correo</th>
-              <th class="py-2">Rol</th>
-              <th class="py-2">Activo</th>
-              <th id="usuarios-acciones" class="py-2 hidden">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tabla-usuarios"></tbody>
-        </table>
+        <button id="btn-add-usuario" class="hidden fixed bottom-6 right-6 bg-blue-600 text-white rounded-full w-12 h-12 flex items-center justify-center text-3xl shadow-lg">+</button>
       </section>
+
+      <div id="modal-usuario" class="hidden fixed inset-0 flex items-center justify-center bg-black/40">
+        <div class="bg-white rounded-lg shadow p-6 w-full max-w-md">
+          <div class="flex justify-between items-center mb-4">
+            <h3 id="modal-title" class="text-xl font-bold">Agregar Integrante</h3>
+            <button id="modal-close" class="text-gray-500">&times;</button>
+          </div>
+          <form id="form-usuario" class="space-y-4">
+            <input id="usuario-nombre" type="text" placeholder="Nombre" class="w-full border p-2 rounded" required />
+            <input id="usuario-email" type="email" placeholder="Correo" class="w-full border p-2 rounded" required />
+            <select id="usuario-rol" class="w-full border p-2 rounded" required>
+              <option value="">Rol</option>
+              <option value="admin">admin</option>
+              <option value="consulta">consulta</option>
+            </select>
+            <select id="usuario-activo" class="w-full border p-2 rounded" required>
+              <option value="">Activo</option>
+              <option value="true">Sí</option>
+              <option value="false">No</option>
+            </select>
+            <input id="usuario-cumple" type="date" class="w-full border p-2 rounded" required />
+            <button type="submit" class="w-full bg-green-600 text-white py-2 rounded">Guardar</button>
+          </form>
+        </div>
+      </div>
 
       <!-- Pagos -->
       <section id="view-pagos" class="view hidden">
