@@ -2,14 +2,14 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebas
 import { getAuth } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
-// TODO: Replace with your Firebase project configuration
+// Firebase project configuration
 const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_AUTH_DOMAIN',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_STORAGE_BUCKET',
-  messagingSenderId: 'YOUR_SENDER_ID',
-  appId: 'YOUR_APP_ID'
+  apiKey: 'AIzaSyCmtN2gcRtoC93DXKZC1QqOEFfdhUtciZ4',
+  authDomain: 'estadistica-ags.firebaseapp.com',
+  projectId: 'estadistica-ags',
+  storageBucket: 'estadistica-ags.firebasestorage.app',
+  messagingSenderId: '903807585037',
+  appId: '1:903807585037:web:34ba22ebdaf827a6c7be44'
 };
 
 export const app = initializeApp(firebaseConfig);
