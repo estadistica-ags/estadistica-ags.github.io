@@ -10,7 +10,9 @@ import {
   getDocs,
   query,
   where,
-  orderBy
+  orderBy,
+  doc,
+  updateDoc
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 // Helpers
@@ -31,7 +33,11 @@ const views = document.querySelectorAll('.view');
 
 const loginForm = document.getElementById('login-form');
 const logoutBtn = document.getElementById('logout');
+const logoutBtnMobile = document.getElementById('logout-mobile');
 const loginError = document.getElementById('login-error');
+const menuToggle = document.getElementById('menu-toggle');
+const mobileMenu = document.getElementById('mobile-menu');
+const menuClose = document.getElementById('menu-close');
 
 let currentUser = null;
 let currentRole = 'consulta';
@@ -59,7 +65,14 @@ loginForm.addEventListener('submit', async e => {
   }
 });
 
-logoutBtn.addEventListener('click', () => signOut(auth));
+logoutBtn?.addEventListener('click', () => signOut(auth));
+logoutBtnMobile?.addEventListener('click', () => signOut(auth));
+
+menuToggle?.addEventListener('click', () => mobileMenu.classList.remove('hidden'));
+menuClose?.addEventListener('click', () => mobileMenu.classList.add('hidden'));
+mobileMenu?.addEventListener('click', e => {
+  if (e.target === mobileMenu) mobileMenu.classList.add('hidden');
+});
 
 onAuthStateChanged(auth, async user => {
   if (user) {
@@ -104,6 +117,9 @@ function setupForms() {
     document.getElementById('form-pago').classList.remove('hidden');
     document.getElementById('form-egreso').classList.remove('hidden');
     document.getElementById('btn-add-usuario').classList.remove('hidden');
+    document.getElementById('usuarios-acciones').classList.remove('hidden');
+    document.getElementById('pagos-acciones').classList.remove('hidden');
+    document.getElementById('egresos-acciones').classList.remove('hidden');
   }
 }
 
@@ -119,7 +135,8 @@ async function loadUsuarios() {
       tr.innerHTML = `<td class="border px-2 py-1">${d.nombre}</td>
                       <td class="border px-2 py-1">${d.email}</td>
                       <td class="border px-2 py-1">${d.rol}</td>
-                      <td class="border px-2 py-1">${d.activo ? 'Sí' : 'No'}</td>`;
+                      <td class="border px-2 py-1">${d.activo ? 'Sí' : 'No'}</td>` +
+                      (currentRole === 'admin' ? `<td class="border px-2 py-1"><button class="edit-usuario text-blue-600" data-id="${doc.id}" data-nombre="${d.nombre}" data-email="${d.email}" data-rol="${d.rol}" data-activo="${d.activo}">Editar</button></td>` : '');
       tbody.appendChild(tr);
     });
     const selPago = document.getElementById('pago-integrante');
@@ -136,6 +153,24 @@ async function loadUsuarios() {
   }
 }
 
+document.getElementById('tabla-usuarios')?.addEventListener('click', async e => {
+  if (e.target.classList.contains('edit-usuario')) {
+    const { id, nombre, email, rol, activo } = e.target.dataset;
+    const nuevoNombre = prompt('Nombre', nombre);
+    if (nuevoNombre === null) return;
+    const nuevoEmail = prompt('Correo', email) || email;
+    const nuevoRol = prompt('Rol', rol) || rol;
+    const nuevoActivo = confirm(`¿Activo? (Actual: ${activo === 'true' ? 'Sí' : 'No'})`);
+    try {
+      await updateDoc(doc(db, 'integrantes', id), { nombre: nuevoNombre, email: nuevoEmail, rol: nuevoRol, activo: nuevoActivo });
+      toast('Usuario actualizado');
+      loadUsuarios();
+    } catch (err) {
+      handleError(err, 'No se pudo actualizar el usuario');
+    }
+  }
+});
+
 // Pagos
 async function loadPagos() {
   try {
@@ -151,13 +186,34 @@ async function loadPagos() {
       tr.innerHTML = `<td class="border px-2 py-1">${integrantes[p.id_integrante] || ''}</td>
                       <td class="border px-2 py-1">${p.quincena}</td>
                       <td class="border px-2 py-1">${p.fechaPago}</td>
-                      <td class="border px-2 py-1">$${p.monto.toFixed(2)}</td>`;
+                      <td class="border px-2 py-1">$${p.monto.toFixed(2)}</td>` +
+                      (currentRole === 'admin' ? `<td class="border px-2 py-1"><button class="edit-pago text-blue-600" data-id="${doc.id}" data-quincena="${p.quincena}" data-fecha="${p.fechaPago}" data-monto="${p.monto}">Editar</button></td>` : '');
       tbody.appendChild(tr);
     });
   } catch (err) {
     handleError(err, 'No se pudieron cargar los pagos');
   }
 }
+
+document.getElementById('tabla-pagos')?.addEventListener('click', async e => {
+  if (e.target.classList.contains('edit-pago')) {
+    const { id, quincena, fecha, monto } = e.target.dataset;
+    const nuevaQuincena = prompt('Quincena', quincena);
+    if (nuevaQuincena === null) return;
+    const nuevaFecha = prompt('Fecha', fecha) || fecha;
+    const nuevoMontoStr = prompt('Monto', monto);
+    if (nuevoMontoStr === null) return;
+    const nuevoMonto = parseFloat(nuevoMontoStr);
+    try {
+      await updateDoc(doc(db, 'pagos', id), { quincena: nuevaQuincena, fechaPago: nuevaFecha, monto: nuevoMonto });
+      toast('Pago actualizado');
+      loadPagos();
+      loadDashboard();
+    } catch (err) {
+      handleError(err, 'No se pudo actualizar el pago');
+    }
+  }
+});
 
 async function loadEgresos() {
   try {
@@ -170,13 +226,35 @@ async function loadEgresos() {
       tr.innerHTML = `<td class="border px-2 py-1">${e.fecha}</td>
                       <td class="border px-2 py-1">${e.concepto}</td>
                       <td class="border px-2 py-1">$${e.monto.toFixed(2)}</td>
-                      <td class="border px-2 py-1">${e.detalle}</td>`;
+                      <td class="border px-2 py-1">${e.detalle}</td>` +
+                      (currentRole === 'admin' ? `<td class="border px-2 py-1"><button class="edit-egreso text-blue-600" data-id="${doc.id}" data-fecha="${e.fecha}" data-concepto="${e.concepto}" data-monto="${e.monto}" data-detalle="${e.detalle}">Editar</button></td>` : '');
       tbody.appendChild(tr);
     });
   } catch (err) {
     handleError(err, 'No se pudieron cargar los egresos');
   }
 }
+
+document.getElementById('tabla-egresos')?.addEventListener('click', async e => {
+  if (e.target.classList.contains('edit-egreso')) {
+    const { id, fecha, concepto, monto, detalle } = e.target.dataset;
+    const nuevaFecha = prompt('Fecha', fecha);
+    if (nuevaFecha === null) return;
+    const nuevoConcepto = prompt('Concepto', concepto) || concepto;
+    const nuevoMontoStr = prompt('Monto', monto);
+    if (nuevoMontoStr === null) return;
+    const nuevoMonto = parseFloat(nuevoMontoStr);
+    const nuevoDetalle = prompt('Detalle', detalle) || detalle;
+    try {
+      await updateDoc(doc(db, 'egresos', id), { fecha: nuevaFecha, concepto: nuevoConcepto, monto: nuevoMonto, detalle: nuevoDetalle });
+      toast('Egreso actualizado');
+      loadEgresos();
+      loadDashboard();
+    } catch (err) {
+      handleError(err, 'No se pudo actualizar el egreso');
+    }
+  }
+});
 
 // Dashboard
 async function loadDashboard() {
