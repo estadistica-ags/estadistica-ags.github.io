@@ -189,6 +189,9 @@ menuClose?.addEventListener('click', () => mobileMenu.classList.add('hidden'));
 mobileMenu?.addEventListener('click', e => {
   if (e.target === mobileMenu) mobileMenu.classList.add('hidden');
 });
+mobileMenu?.querySelectorAll('a, button').forEach(el => {
+  el.addEventListener('click', () => mobileMenu.classList.add('hidden'));
+});
 
 onAuthStateChanged(auth, async user => {
   if (user) {
