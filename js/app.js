@@ -45,14 +45,15 @@ const formatCumple = str => {
   return parts.length === 3 ? `${parts[2]}/${parts[1]}` : str;
 };
 
-const formatDateLong = date => {
+const formatDateLong = (date, includeYear = true) => {
   if (!date) return '';
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('es-ES', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric'
-  });
+  const day = d.toLocaleDateString('es-ES', { day: '2-digit' });
+  const month = d.toLocaleDateString('es-ES', { month: 'long' });
+  const monthCap = month.charAt(0).toUpperCase() + month.slice(1);
+  return includeYear
+    ? `${day} de ${monthCap} de ${d.getFullYear()}`
+    : `${day} de ${monthCap}`;
 };
 
 const getConceptIcon = concept => {
@@ -598,7 +599,7 @@ async function loadCumples() {
         <span class="text-3xl">🎂</span>
         <div>
           <p class="font-bold">${c.nombre}</p>
-          <p class="text-sm">${formatDateLong(c.fecha)}</p>
+          <p class="text-sm">${formatDateLong(c.fecha, false)}</p>
         </div>
       `;
       cont.appendChild(card);
