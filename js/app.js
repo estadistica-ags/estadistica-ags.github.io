@@ -306,7 +306,7 @@ async function loadUsuarios() {
     const selPago = document.getElementById('pago-integrante');
     const selEstado = document.getElementById('estado-integrante');
     if (selPago) selPago.innerHTML = '<option value="">Integrante</option>';
-    if (selEstado) selEstado.innerHTML = '';
+    if (selEstado) selEstado.innerHTML = '<option value=""></option>';
     snap.forEach(docu => {
       const d = docu.data();
       const card = document.createElement('div');
