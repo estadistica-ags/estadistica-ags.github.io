@@ -14,7 +14,8 @@ import {
   orderBy,
   doc,
   updateDoc,
-  deleteDoc
+  deleteDoc,
+  setDoc
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 // Helpers
@@ -80,13 +81,12 @@ const buildAnnualCalendar = year => {
 const ensureQuincenasYear = async year => {
   const calendar = buildAnnualCalendar(year);
   const existingSnap = await getDocs(collection(db, 'pagos'));
-  const existentes = new Set();
-  existingSnap.forEach(d => existentes.add(d.data().quincena));
+  const existentes = new Set(existingSnap.docs.map(d => d.id));
   const usuariosSnap = await getDocs(query(collection(db, 'usuarios'), where('activo', '==', true)));
   const montoEsperado = usuariosSnap.size * MONTO_QUINCENA;
   for (const q of calendar) {
     if (!existentes.has(q.quincena)) {
-      await addDoc(collection(db, 'pagos'), {
+      await setDoc(doc(db, 'pagos', q.quincena), {
         quincena: q.quincena,
         fechaLimite: q.fechaLimite,
         montoEsperado,
@@ -152,7 +152,6 @@ let currentRole = 'consulta';
 
 let pagosData = [];
 let pagosMostrados = 0;
-let pagoSeleccionado = null;
 let integrantesMap = {};
 
 const cardsPagos = document.getElementById('cards-pagos');
@@ -379,6 +378,7 @@ async function loadPagos() {
       const data = d.data();
       integrantesMap[d.id] = data.nombre;
     });
+    const montoEsperado = usuariosSnap.size * MONTO_QUINCENA;
     const selGlobal = document.getElementById('select-integrante');
     if (selGlobal) {
       selGlobal.innerHTML = '<option value="">Usuario</option>';
@@ -392,9 +392,10 @@ async function loadPagos() {
     const snap = await getDocs(collection(db, 'pagos'));
     snap.forEach(docu => {
       const p = docu.data();
-      const estatus = computeEstatus(p.fechaLimite, p.montoAbonado || 0, p.montoEsperado);
+      if (p.montoEsperado !== montoEsperado) updateDoc(docu.ref, { montoEsperado });
+      const estatus = computeEstatus(p.fechaLimite, p.montoAbonado || 0, montoEsperado);
       if (estatus !== p.estatus) updateDoc(docu.ref, { estatus });
-      pagosData.push({ id: docu.id, ...p, estatus });
+      pagosData.push({ id: docu.id, ...p, estatus, montoEsperado });
     });
     pagosData.sort((a, b) => new Date(a.fechaLimite) - new Date(b.fechaLimite));
     renderPagos();
@@ -417,19 +418,21 @@ function renderPagos() {
   slice.forEach(p => {
     const info = STATUS_STYLES[p.estatus] || STATUS_STYLES.Futuro;
     const card = document.createElement('div');
-    card.className = `relative bg-white rounded-lg shadow p-4 border-l-4 ${info.border}`;
+    card.className = `pago-card bg-white rounded-lg shadow border-l-4 ${info.border}`;
+    card.dataset.id = p.id;
     card.innerHTML = `
-      <span class="absolute top-2 right-2 text-xs text-white px-2 py-1 rounded ${info.badge}">${p.estatus}</span>
-      <div class="flex items-center mb-2"><span class="text-2xl mr-2">${info.icon}</span><h3 class="font-bold">${p.quincena}</h3></div>
-      <p class="text-sm text-gray-600 mb-1">Fecha límite: ${formatDateLong(p.fechaLimite)}</p>
-      <p class="text-sm text-gray-600 mb-1">Monto esperado: $${p.montoEsperado.toFixed(2)}</p>
-      <p class="text-sm text-gray-600">Monto abonado: $${(p.montoAbonado || 0).toFixed(2)}</p>
-      <div class="w-full bg-gray-200 h-2 rounded mb-2"><div class="h-2 bg-green-500" style="width:${Math.min(100, ((p.montoAbonado||0)/p.montoEsperado)*100)}%"></div></div>
-      <div class="flex space-x-2">
-        <button data-id="${p.id}" class="ver-detalle bg-blue-500 text-white px-2 py-1 rounded text-sm">👁 Ver detalle</button>
-        <button data-id="${p.id}" class="abonar bg-green-500 text-white px-2 py-1 rounded text-sm ${currentRole === 'consulta' ? 'opacity-50 cursor-not-allowed' : ''}" ${currentRole === 'consulta' ? 'disabled' : ''}>➕ Abonar</button>
+      <div class="header p-4 flex justify-between items-center cursor-pointer">
+        <div>
+          <h3 class="font-bold">${p.quincena}</h3>
+          <p class="text-sm text-gray-600">Fecha límite: ${formatDateLong(p.fechaLimite)}</p>
+          <p class="text-sm text-gray-600">Monto esperado: $${p.montoEsperado.toFixed(2)}</p>
+          <p class="text-sm text-gray-600 monto-abonado">Monto abonado: $${(p.montoAbonado || 0).toFixed(2)}</p>
+        </div>
+        <span class="badge text-xs text-white px-2 py-1 rounded ${info.badge}">${p.estatus}</span>
       </div>
+      <div class="usuarios hidden border-t p-2 max-h-60 overflow-y-auto"></div>
     `;
+    card.querySelector('.header').addEventListener('click', () => toggleUsuarios(card, p));
     frag.appendChild(card);
   });
   cardsPagos.appendChild(frag);
@@ -535,92 +538,74 @@ async function loadCumples() {
 }
 
 // Pagos interactions
-cardsPagos?.addEventListener('click', e => {
-  const id = e.target.dataset.id;
-  if (e.target.classList.contains('ver-detalle')) {
-    const ul = document.getElementById('lista-historial');
-    ul.innerHTML = '';
-    getDocs(collection(db, 'pagos', id, 'abonos')).then(snap => {
-      snap.forEach(a => {
-        const d = a.data();
-        const li = document.createElement('li');
-        li.textContent = `${d.fecha.slice(0,10)} - ${d.nombre}: $${d.monto.toFixed(2)} (${d.tipo})`;
-        ul.appendChild(li);
-      });
-      modalDetalle.classList.remove('hidden');
-    });
-  } else if (e.target.classList.contains('abonar') && currentRole !== 'consulta') {
-    pagoSeleccionado = id;
-    const sel = document.getElementById('abono-usuario');
-    if (sel) {
-      sel.innerHTML = '<option value="">Usuario</option>';
-      Object.entries(integrantesMap).forEach(([uid, nombre]) => {
-        sel.innerHTML += `<option value="${uid}">${nombre}</option>`;
-      });
+cardsPagos?.addEventListener('change', async e => {
+  if (e.target.classList.contains('toggle-pago')) {
+    const uid = e.target.dataset.uid;
+    const card = e.target.closest('.pago-card');
+    const pagoId = card.dataset.id;
+    const nombre = integrantesMap[uid] || '';
+    try {
+      const ref = doc(db, 'pagos', pagoId, 'abonos', uid);
+      if (e.target.checked) {
+        await setDoc(ref, { id_usuario: uid, nombre, monto: MONTO_QUINCENA, fecha: new Date().toISOString() });
+      } else {
+        await deleteDoc(ref);
+      }
+      await recalcPago(pagoId, card);
+    } catch (err) {
+      handleError(err, 'No se pudo actualizar el abono');
     }
-    document.getElementById('input-abono').value = '';
-    document.getElementById('abono-tipo').value = 'quincenal';
-    modalAbono.classList.remove('hidden');
   }
 });
 
 verMasBtn?.addEventListener('click', renderPagos);
 
-document.getElementById('cerrar-detalle')?.addEventListener('click', () => modalDetalle.classList.add('hidden'));
-document.getElementById('exportar-detalle')?.addEventListener('click', () => {
-  const elem = document.getElementById('lista-historial');
-  html2pdf().from(elem).save();
-});
-modalDetalle?.addEventListener('click', e => { if (e.target === modalDetalle) modalDetalle.classList.add('hidden'); });
-
-document.getElementById('abono-cancelar')?.addEventListener('click', () => modalAbono.classList.add('hidden'));
-modalAbono?.addEventListener('click', e => { if (e.target === modalAbono) modalAbono.classList.add('hidden'); });
-
-document.getElementById('abono-guardar')?.addEventListener('click', async () => {
-  const monto = parseFloat(document.getElementById('input-abono').value);
-  const usuario = document.getElementById('abono-usuario').value;
-  const tipo = document.getElementById('abono-tipo').value;
-  if (!monto || !usuario) return toast('Datos incompletos');
-  try {
-    await registrarAbonoQuincena(pagoSeleccionado, {
-      id_usuario: usuario,
-      nombre: integrantesMap[usuario] || '',
-      monto,
-      fecha: new Date().toISOString(),
-      tipo
-    });
-    toast('Abono registrado');
-    modalAbono.classList.add('hidden');
-    loadPagos();
-    loadDashboard();
-    if (estadoSelect && estadoSelect.value) loadEstado();
-  } catch (err) {
-    handleError(err, 'No se pudo registrar el abono');
+async function toggleUsuarios(card, pago) {
+  const cont = card.querySelector('.usuarios');
+  if (!cont.classList.contains('hidden')) {
+    cont.classList.add('hidden');
+    return;
   }
-});
+  cont.classList.remove('hidden');
+  if (cont.dataset.loaded) return;
+  const abonados = {};
+  const snap = await getDocs(collection(db, 'pagos', pago.id, 'abonos'));
+  snap.forEach(a => { abonados[a.id] = a.data(); });
+  cont.innerHTML = '';
+  Object.entries(integrantesMap).forEach(([uid, nombre]) => {
+    const abono = abonados[uid];
+    cont.innerHTML += `
+      <div class="flex items-center justify-between py-2 border-b last:border-b-0">
+        <div>
+          <p class="font-medium">${nombre}</p>
+          ${abono ? `<p class="text-xs text-gray-500">$${abono.monto.toFixed(2)} - ${formatDate(abono.fecha.slice(0,10))}</p>` : '<p class="text-xs text-gray-400">Pendiente</p>'}
+        </div>
+        <input type="checkbox" class="toggle-pago" data-uid="${uid}" ${abono ? 'checked' : ''}/>
+      </div>
+    `;
+  });
+  cont.dataset.loaded = 'true';
+}
 
-btnAbonoGlobal?.addEventListener('click', () => {
-  document.getElementById('monto-global').value = '';
-  modalAbonoGlobal.classList.remove('hidden');
-});
+async function recalcPago(pagoId, card) {
+  const ref = doc(db, 'pagos', pagoId);
+  const snap = await getDoc(ref);
+  const data = snap.data();
+  let montoAbonado = 0;
+  const abonosSnap = await getDocs(collection(ref, 'abonos'));
+  abonosSnap.forEach(a => { montoAbonado += a.data().monto; });
+  const estatus = computeEstatus(data.fechaLimite, montoAbonado, data.montoEsperado);
+  await updateDoc(ref, { montoAbonado, estatus });
+  const info = STATUS_STYLES[estatus] || STATUS_STYLES.Futuro;
+  card.querySelector('.monto-abonado').textContent = `Monto abonado: $${montoAbonado.toFixed(2)}`;
+  const badge = card.querySelector('.badge');
+  badge.textContent = estatus;
+  badge.className = `badge text-xs text-white px-2 py-1 rounded ${info.badge}`;
+  card.className = `pago-card bg-white rounded-lg shadow border-l-4 ${info.border}`;
+}
 
-document.getElementById('global-cancelar')?.addEventListener('click', () => modalAbonoGlobal.classList.add('hidden'));
-modalAbonoGlobal?.addEventListener('click', e => { if (e.target === modalAbonoGlobal) modalAbonoGlobal.classList.add('hidden'); });
-
-document.getElementById('global-guardar')?.addEventListener('click', async () => {
-  const id = document.getElementById('select-integrante').value;
-  const monto = parseFloat(document.getElementById('monto-global').value);
-  if (!id || !monto) return toast('Datos incompletos');
-  try {
-    await registrarAbono(id, monto);
-    toast('Abono registrado');
-    modalAbonoGlobal.classList.add('hidden');
-    loadPagos();
-    loadDashboard();
-    if (estadoSelect && estadoSelect.value) loadEstado();
-  } catch (err) {
-    handleError(err, 'No se pudo registrar el abono');
-  }
+document.getElementById('exportar-pagos')?.addEventListener('click', () => {
+  html2pdf().from(cardsPagos).save();
 });
 
 // Add egreso
