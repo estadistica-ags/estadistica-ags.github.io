@@ -151,7 +151,10 @@
       <!-- Pagos -->
       <section id="view-pagos" class="view hidden pb-24">
         <h2 class="text-2xl font-bold mb-4">Pagos</h2>
-        <button id="exportar-pagos" class="mb-4 bg-blue-600 text-white px-3 py-1 rounded">Exportar PDF</button>
+        <div class="mb-4 flex space-x-2">
+          <button id="btn-add-pago" class="bg-green-600 text-white px-3 py-1 rounded hidden">➕ Nueva fecha de pago</button>
+          <button id="exportar-pagos" class="bg-blue-600 text-white px-3 py-1 rounded">Exportar PDF</button>
+        </div>
         <div id="cards-pagos" class="space-y-4"></div>
         <button id="ver-mas" class="mt-4 w-full bg-blue-600 text-white py-2 rounded hidden">Ver más</button>
         <div id="barra-abono-global" class="hidden fixed bottom-0 left-0 right-0 bg-white border-t p-4">
@@ -234,6 +237,21 @@
             <button id="global-cancelar" class="px-4 py-2 border rounded">Cancelar</button>
             <button id="global-guardar" class="px-4 py-2 bg-green-600 text-white rounded">Guardar</button>
           </div>
+        </div>
+      </div>
+
+      <div id="modal-quincena" class="fixed inset-0 bg-black/40 hidden items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+          <h3 id="quincena-title" class="text-xl font-bold mb-4">Nueva fecha de pago</h3>
+          <form id="form-quincena" class="space-y-4">
+            <input id="quincena-id" type="text" placeholder="ID de quincena" class="w-full border p-2 rounded" required />
+            <input id="quincena-fecha" type="date" class="w-full border p-2 rounded" required />
+            <input id="quincena-monto" type="number" class="w-full border p-2 rounded" placeholder="Monto por usuario (opcional)" />
+            <div class="flex justify-end space-x-2">
+              <button type="button" id="quincena-cancelar" class="px-4 py-2 border rounded">Cancelar</button>
+              <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded">Guardar</button>
+            </div>
+          </form>
         </div>
       </div>
     </main>

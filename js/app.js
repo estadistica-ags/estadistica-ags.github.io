@@ -61,42 +61,6 @@ const STATUS_STYLES = {
   Futuro: { icon: '📅', border: 'border-gray-400', badge: 'bg-gray-400' }
 };
 
-const buildAnnualCalendar = year => {
-  const res = [];
-  for (let m = 0; m < 12; m++) {
-    const first = new Date(year, m, 16);
-    const last = new Date(year, m + 1, 0);
-    res.push({
-      quincena: `${year}-Q${String(m * 2 + 1).padStart(2, '0')}`,
-      fechaLimite: first.toISOString().slice(0, 10)
-    });
-    res.push({
-      quincena: `${year}-Q${String(m * 2 + 2).padStart(2, '0')}`,
-      fechaLimite: last.toISOString().slice(0, 10)
-    });
-  }
-  return res;
-};
-
-const ensureQuincenasYear = async year => {
-  const calendar = buildAnnualCalendar(year);
-  const existingSnap = await getDocs(collection(db, 'pagos'));
-  const existentes = new Set(existingSnap.docs.map(d => d.id));
-  const usuariosSnap = await getDocs(query(collection(db, 'usuarios'), where('activo', '==', true)));
-  const montoEsperado = usuariosSnap.size * MONTO_QUINCENA;
-  for (const q of calendar) {
-    if (!existentes.has(q.quincena)) {
-      await setDoc(doc(db, 'pagos', q.quincena), {
-        quincena: q.quincena,
-        fechaLimite: q.fechaLimite,
-        montoEsperado,
-        montoAbonado: 0,
-        estatus: computeEstatus(q.fechaLimite, 0, montoEsperado)
-      });
-    }
-  }
-};
-
 const registrarAbonoQuincena = async (pagoId, abono) => {
   const ref = doc(db, 'pagos', pagoId);
   await addDoc(collection(ref, 'abonos'), abono);
@@ -161,6 +125,12 @@ const btnAbonoGlobal = document.getElementById('btn-abono-global');
 const modalDetalle = document.getElementById('modal-detalle');
 const modalAbono = document.getElementById('modal-abono');
 const modalAbonoGlobal = document.getElementById('modal-abono-global');
+const btnAddPago = document.getElementById('btn-add-pago');
+const modalQuincena = document.getElementById('modal-quincena');
+const formQuincena = document.getElementById('form-quincena');
+const quincenaCancel = document.getElementById('quincena-cancelar');
+const quincenaTitle = document.getElementById('quincena-title');
+let editingPago = null;
 
 // Modal elements for gestión de integrantes
 const modalUsuario = document.getElementById('modal-usuario');
@@ -245,6 +215,7 @@ function setupForms() {
     document.getElementById('btn-add-usuario').classList.remove('hidden');
     document.getElementById('usuarios-acciones').classList.remove('hidden');
     document.getElementById('egresos-acciones').classList.remove('hidden');
+    btnAddPago?.classList.remove('hidden');
   }
 }
 
@@ -366,6 +337,69 @@ document.getElementById('tabla-usuarios')?.addEventListener('click', async e => 
   }
 });
 
+function openPagoModal(data = null) {
+  modalQuincena.classList.remove('hidden');
+  if (data) {
+    editingPago = data.id;
+    quincenaTitle.textContent = 'Editar fecha de pago';
+    document.getElementById('quincena-id').value = data.quincena;
+    document.getElementById('quincena-id').setAttribute('disabled', 'true');
+    document.getElementById('quincena-fecha').value = data.fechaLimite;
+    document.getElementById('quincena-monto').value = data.montoPorUsuario || MONTO_QUINCENA;
+  } else {
+    editingPago = null;
+    quincenaTitle.textContent = 'Nueva fecha de pago';
+    document.getElementById('quincena-id').removeAttribute('disabled');
+    formQuincena?.reset();
+    document.getElementById('quincena-monto').value = MONTO_QUINCENA;
+  }
+}
+
+function closePagoModal() {
+  modalQuincena.classList.add('hidden');
+  formQuincena?.reset();
+}
+
+btnAddPago?.addEventListener('click', () => openPagoModal());
+quincenaCancel?.addEventListener('click', closePagoModal);
+modalQuincena?.addEventListener('click', e => {
+  if (e.target === modalQuincena) closePagoModal();
+});
+
+formQuincena?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = document.getElementById('quincena-id').value.trim();
+  const fecha = document.getElementById('quincena-fecha').value;
+  const monto = parseFloat(document.getElementById('quincena-monto').value) || MONTO_QUINCENA;
+  if (!id || !fecha) return toast('Datos incompletos');
+  try {
+    const usuariosSnap = await getDocs(query(collection(db, 'usuarios'), where('activo', '==', true)));
+    const montoEsperado = usuariosSnap.size * monto;
+    if (editingPago) {
+      const ref = doc(db, 'pagos', editingPago);
+      const snap = await getDoc(ref);
+      const abonado = snap.data().montoAbonado || 0;
+      const estatus = computeEstatus(fecha, abonado, montoEsperado);
+      await updateDoc(ref, { quincena: id, fechaLimite: fecha, montoPorUsuario: monto, montoEsperado, estatus });
+      toast('Quincena actualizada');
+    } else {
+      await setDoc(doc(db, 'pagos', id), {
+        quincena: id,
+        fechaLimite: fecha,
+        montoPorUsuario: monto,
+        montoEsperado,
+        montoAbonado: 0,
+        estatus: computeEstatus(fecha, 0, montoEsperado)
+      });
+      toast('Quincena creada');
+    }
+    closePagoModal();
+    loadPagos();
+  } catch (err) {
+    handleError(err, 'No se pudo guardar la quincena');
+  }
+});
+
 // Pagos
 async function loadPagos() {
   try {
@@ -378,7 +412,6 @@ async function loadPagos() {
       const data = d.data();
       integrantesMap[d.id] = data.nombre;
     });
-    const montoEsperado = usuariosSnap.size * MONTO_QUINCENA;
     const selGlobal = document.getElementById('select-integrante');
     if (selGlobal) {
       selGlobal.innerHTML = '<option value="">Usuario</option>';
@@ -386,16 +419,12 @@ async function loadPagos() {
         selGlobal.innerHTML += `<option value="${id}">${nombre}</option>`;
       });
     }
-    const year = new Date().getFullYear();
-    await ensureQuincenasYear(year);
-    await ensureQuincenasYear(year + 1);
     const snap = await getDocs(collection(db, 'pagos'));
     snap.forEach(docu => {
       const p = docu.data();
-      if (p.montoEsperado !== montoEsperado) updateDoc(docu.ref, { montoEsperado });
-      const estatus = computeEstatus(p.fechaLimite, p.montoAbonado || 0, montoEsperado);
+      const estatus = computeEstatus(p.fechaLimite, p.montoAbonado || 0, p.montoEsperado);
       if (estatus !== p.estatus) updateDoc(docu.ref, { estatus });
-      pagosData.push({ id: docu.id, ...p, estatus, montoEsperado });
+      pagosData.push({ id: docu.id, ...p, estatus });
     });
     pagosData.sort((a, b) => new Date(a.fechaLimite) - new Date(b.fechaLimite));
     renderPagos();
@@ -420,6 +449,8 @@ function renderPagos() {
     const card = document.createElement('div');
     card.className = `pago-card bg-white rounded-lg shadow border-l-4 ${info.border}`;
     card.dataset.id = p.id;
+    card.dataset.cuota = p.montoPorUsuario || MONTO_QUINCENA;
+    card.dataset.fecha = p.fechaLimite;
     card.innerHTML = `
       <div class="header p-4 flex justify-between items-center cursor-pointer">
         <div>
@@ -428,7 +459,10 @@ function renderPagos() {
           <p class="text-sm text-gray-600">Monto esperado: $${p.montoEsperado.toFixed(2)}</p>
           <p class="text-sm text-gray-600 monto-abonado">Monto abonado: $${(p.montoAbonado || 0).toFixed(2)}</p>
         </div>
-        <span class="badge text-xs text-white px-2 py-1 rounded ${info.badge}">${p.estatus}</span>
+        <div class="flex items-center space-x-2">
+          <span class="badge text-xs text-white px-2 py-1 rounded ${info.badge}">${p.estatus}</span>
+          ${currentRole === 'admin' ? `<button class="edit-pago" data-id="${p.id}">✏️</button><button class="delete-pago" data-id="${p.id}">🗑️</button>` : ''}
+        </div>
       </div>
       <div class="usuarios hidden border-t p-2 max-h-60 overflow-y-auto"></div>
     `;
@@ -544,10 +578,13 @@ cardsPagos?.addEventListener('change', async e => {
     const card = e.target.closest('.pago-card');
     const pagoId = card.dataset.id;
     const nombre = integrantesMap[uid] || '';
+    const cuota = parseFloat(card.dataset.cuota) || MONTO_QUINCENA;
+    const hoy = new Date().toISOString().slice(0, 10);
+    const tipo = card.dataset.fecha > hoy ? 'anticipado' : 'quincenal';
     try {
       const ref = doc(db, 'pagos', pagoId, 'abonos', uid);
       if (e.target.checked) {
-        await setDoc(ref, { id_usuario: uid, nombre, monto: MONTO_QUINCENA, fecha: new Date().toISOString() });
+        await setDoc(ref, { id_usuario: uid, nombre, monto: cuota, fecha: new Date().toISOString(), tipo });
       } else {
         await deleteDoc(ref);
       }
@@ -557,6 +594,26 @@ cardsPagos?.addEventListener('change', async e => {
     }
   }
 });
+
+cardsPagos?.addEventListener('click', async e => {
+  if (e.target.classList.contains('edit-pago')) {
+    e.stopPropagation();
+    const id = e.target.dataset.id;
+    const pago = pagosData.find(p => p.id === id);
+    openPagoModal(pago);
+  } else if (e.target.classList.contains('delete-pago')) {
+    e.stopPropagation();
+    const id = e.target.dataset.id;
+    if (confirm('¿Eliminar quincena?')) {
+      try {
+        await deleteDoc(doc(db, 'pagos', id));
+        loadPagos();
+      } catch (err) {
+        handleError(err, 'No se pudo eliminar la quincena');
+      }
+    }
+  }
+}, true);
 
 verMasBtn?.addEventListener('click', renderPagos);
 
@@ -648,7 +705,7 @@ async function loadEstado() {
       let abonado = 0;
       const abonosSnap = await getDocs(query(collection(db, 'pagos', d.id, 'abonos'), where('id_usuario', '==', id)));
       abonosSnap.forEach(a => (abonado += a.data().monto));
-      const estatus = computeEstatus(p.fechaLimite, abonado, MONTO_QUINCENA);
+      const estatus = computeEstatus(p.fechaLimite, abonado, p.montoPorUsuario || MONTO_QUINCENA);
       resumen[estatus]++;
       total += abonado;
       list.push(`<tr><td class='border px-2 py-1'>${p.quincena}</td><td class='border px-2 py-1'>${p.fechaLimite}</td><td class='border px-2 py-1'>$${abonado.toFixed(2)}</td><td class='border px-2 py-1'>${estatus}</td></tr>`);
