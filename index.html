@@ -200,15 +200,23 @@
       <div id="modal-detalle" class="fixed inset-0 bg-black/40 hidden items-center justify-center">
         <div class="bg-white rounded-lg p-6 w-full max-w-md">
           <h3 class="text-xl font-bold mb-4">Historial de abonos</h3>
-          <ul id="lista-historial" class="space-y-2"></ul>
-          <button id="cerrar-detalle" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded">Cerrar</button>
+          <ul id="lista-historial" class="space-y-2 mb-4"></ul>
+          <div class="flex justify-end space-x-2">
+            <button id="exportar-detalle" class="bg-green-600 text-white px-4 py-2 rounded">Exportar</button>
+            <button id="cerrar-detalle" class="bg-blue-600 text-white px-4 py-2 rounded">Cerrar</button>
+          </div>
         </div>
       </div>
 
       <div id="modal-abono" class="fixed inset-0 bg-black/40 hidden items-center justify-center">
         <div class="bg-white rounded-lg p-6 w-full max-w-md">
           <h3 class="text-xl font-bold mb-4">Registrar abono</h3>
+          <select id="abono-usuario" class="border p-2 w-full mb-4"></select>
           <input id="input-abono" type="number" class="border p-2 w-full mb-4" placeholder="Monto" />
+          <select id="abono-tipo" class="border p-2 w-full mb-4">
+            <option value="quincenal">quincenal</option>
+            <option value="anticipado">anticipado</option>
+          </select>
           <div class="flex justify-end space-x-2">
             <button id="abono-cancelar" class="px-4 py-2 border rounded">Cancelar</button>
             <button id="abono-guardar" class="px-4 py-2 bg-green-600 text-white rounded">Guardar</button>
