@@ -504,15 +504,13 @@ async function loadEgresos() {
         `<td class="px-4 py-2">${e.fecha}</td>` +
         `<td class="px-4 py-2 flex items-center"><span class="mr-1">${icon}</span>${e.concepto}</td>` +
         `<td class="px-4 py-2">$${e.monto.toFixed(2)}</td>` +
-        `<td class="px-4 py-2">${e.detalle || ''}</td>` +
         (currentRole === 'admin'
-          ? `<td class="px-4 py-2 space-x-2"><button class="edit-egreso text-blue-600" data-id="${doc.id}" data-fecha="${e.fecha}" data-concepto="${e.concepto}" data-monto="${e.monto}" data-detalle="${e.detalle || ''}">✏️</button><button class="delete-egreso text-red-600" data-id="${doc.id}">🗑</button></td>`
+          ? `<td class="px-4 py-2 space-x-2"><button class="edit-egreso text-blue-600" data-id="${doc.id}" data-fecha="${e.fecha}" data-concepto="${e.concepto}" data-monto="${e.monto}">✏️</button><button class="delete-egreso text-red-600" data-id="${doc.id}">🗑</button></td>`
           : '');
       tbody.appendChild(tr);
     });
     const tfoot = document.getElementById('tfoot-egresos');
-    const colSpan = currentRole === 'admin' ? 2 : 1;
-    tfoot.innerHTML = `<tr class="font-semibold"><td colspan="2" class="px-4 py-2 text-right">Total</td><td class="px-4 py-2">$${total.toFixed(2)}</td><td colspan="${colSpan}"></td></tr>`;
+    tfoot.innerHTML = `<tr class="font-semibold"><td colspan="2" class="px-4 py-2 text-right">Total</td><td class="px-4 py-2">$${total.toFixed(2)}</td>${currentRole === 'admin' ? '<td></td>' : ''}</tr>`;
   } catch (err) {
     handleError(err, 'No se pudieron cargar los egresos');
   }
@@ -520,15 +518,14 @@ async function loadEgresos() {
 
 document.getElementById('tabla-egresos')?.addEventListener('click', async e => {
   if (e.target.classList.contains('edit-egreso')) {
-    const { id, fecha, concepto, monto, detalle } = e.target.dataset;
+    const { id, fecha, concepto, monto } = e.target.dataset;
     const nuevaFecha = prompt('Fecha', fecha) || fecha;
     const nuevoConcepto = prompt('Concepto', concepto) || concepto;
     const nuevoMontoStr = prompt('Monto', monto) || monto;
     const nuevoMonto = parseFloat(nuevoMontoStr);
     if (isNaN(nuevoMonto) || nuevoMonto <= 0) return toast('Monto inválido');
-    const nuevoDetalle = prompt('Detalle', detalle) || detalle;
     try {
-      await updateDoc(doc(db, 'egresos', id), { fecha: nuevaFecha, concepto: nuevoConcepto, monto: nuevoMonto, detalle: nuevoDetalle });
+      await updateDoc(doc(db, 'egresos', id), { fecha: nuevaFecha, concepto: nuevoConcepto, monto: nuevoMonto });
       toast('Egreso actualizado');
       loadEgresos();
       loadDashboard();
@@ -713,9 +710,8 @@ formEgreso?.addEventListener('submit', async e => {
     const fecha = document.getElementById('egreso-fecha').value;
     const concepto = document.getElementById('egreso-concepto').value.trim();
     const monto = parseFloat(document.getElementById('egreso-monto').value);
-    const detalle = document.getElementById('egreso-detalle').value.trim();
     if (!fecha || !concepto || isNaN(monto) || monto <= 0) return toast('Datos incompletos o monto inválido');
-    await addDoc(collection(db, 'egresos'), { fecha, concepto, monto, detalle });
+    await addDoc(collection(db, 'egresos'), { fecha, concepto, monto });
     toast('Egreso registrado');
     formEgreso.reset();
     loadEgresos();
