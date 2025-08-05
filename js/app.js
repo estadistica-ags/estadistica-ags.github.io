@@ -55,6 +55,14 @@ const formatDateLong = date => {
   });
 };
 
+const getConceptIcon = concept => {
+  const c = concept?.toLowerCase() || '';
+  if (c.includes('pastel')) return '🎂';
+  if (c.includes('comida') || c.includes('alimento')) return '🍽️';
+  if (c.includes('transporte') || c.includes('taxi')) return '🚌';
+  return '💸';
+};
+
 // Quincena helpers
 const MONTO_QUINCENA = 30;
 const META_SALDO = 1000; // Meta mensual para barra de progreso
@@ -485,16 +493,26 @@ async function loadEgresos() {
     const tbody = document.getElementById('tabla-egresos');
     tbody.innerHTML = '';
     const snap = await getDocs(collection(db, 'egresos'));
+    let total = 0;
     snap.forEach(doc => {
       const e = doc.data();
+      total += e.monto;
+      const icon = getConceptIcon(e.concepto);
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="border px-2 py-1">${e.fecha}</td>
-                      <td class="border px-2 py-1">${e.concepto}</td>
-                      <td class="border px-2 py-1">$${e.monto.toFixed(2)}</td>
-                      <td class="border px-2 py-1">${e.detalle}</td>` +
-                      (currentRole === 'admin' ? `<td class="border px-2 py-1"><button class="edit-egreso text-blue-600" data-id="${doc.id}" data-fecha="${e.fecha}" data-concepto="${e.concepto}" data-monto="${e.monto}" data-detalle="${e.detalle}">Editar</button></td>` : '');
+      tr.className = 'border-b even:bg-gray-50';
+      tr.innerHTML =
+        `<td class="px-4 py-2">${e.fecha}</td>` +
+        `<td class="px-4 py-2 flex items-center"><span class="mr-1">${icon}</span>${e.concepto}</td>` +
+        `<td class="px-4 py-2">$${e.monto.toFixed(2)}</td>` +
+        `<td class="px-4 py-2">${e.detalle || ''}</td>` +
+        (currentRole === 'admin'
+          ? `<td class="px-4 py-2 space-x-2"><button class="edit-egreso text-blue-600" data-id="${doc.id}" data-fecha="${e.fecha}" data-concepto="${e.concepto}" data-monto="${e.monto}" data-detalle="${e.detalle || ''}">✏️</button><button class="delete-egreso text-red-600" data-id="${doc.id}">🗑</button></td>`
+          : '');
       tbody.appendChild(tr);
     });
+    const tfoot = document.getElementById('tfoot-egresos');
+    const colSpan = currentRole === 'admin' ? 2 : 1;
+    tfoot.innerHTML = `<tr class="font-semibold"><td colspan="2" class="px-4 py-2 text-right">Total</td><td class="px-4 py-2">$${total.toFixed(2)}</td><td colspan="${colSpan}"></td></tr>`;
   } catch (err) {
     handleError(err, 'No se pudieron cargar los egresos');
   }
@@ -503,12 +521,11 @@ async function loadEgresos() {
 document.getElementById('tabla-egresos')?.addEventListener('click', async e => {
   if (e.target.classList.contains('edit-egreso')) {
     const { id, fecha, concepto, monto, detalle } = e.target.dataset;
-    const nuevaFecha = prompt('Fecha', fecha);
-    if (nuevaFecha === null) return;
+    const nuevaFecha = prompt('Fecha', fecha) || fecha;
     const nuevoConcepto = prompt('Concepto', concepto) || concepto;
-    const nuevoMontoStr = prompt('Monto', monto);
-    if (nuevoMontoStr === null) return;
+    const nuevoMontoStr = prompt('Monto', monto) || monto;
     const nuevoMonto = parseFloat(nuevoMontoStr);
+    if (isNaN(nuevoMonto) || nuevoMonto <= 0) return toast('Monto inválido');
     const nuevoDetalle = prompt('Detalle', detalle) || detalle;
     try {
       await updateDoc(doc(db, 'egresos', id), { fecha: nuevaFecha, concepto: nuevoConcepto, monto: nuevoMonto, detalle: nuevoDetalle });
@@ -517,6 +534,17 @@ document.getElementById('tabla-egresos')?.addEventListener('click', async e => {
       loadDashboard();
     } catch (err) {
       handleError(err, 'No se pudo actualizar el egreso');
+    }
+  } else if (e.target.classList.contains('delete-egreso')) {
+    const id = e.target.dataset.id;
+    if (!confirm('¿Eliminar egreso?')) return;
+    try {
+      await deleteDoc(doc(db, 'egresos', id));
+      toast('Egreso eliminado');
+      loadEgresos();
+      loadDashboard();
+    } catch (err) {
+      handleError(err, 'No se pudo eliminar el egreso');
     }
   }
 });
@@ -678,16 +706,18 @@ document.getElementById('exportar-pagos')?.addEventListener('click', () => {
 });
 
 // Add egreso
-const guardarEgreso = document.getElementById('guardar-egreso');
-guardarEgreso?.addEventListener('click', async () => {
+const formEgreso = document.getElementById('egreso-form');
+formEgreso?.addEventListener('submit', async e => {
+  e.preventDefault();
   try {
     const fecha = document.getElementById('egreso-fecha').value;
-    const concepto = document.getElementById('egreso-concepto').value;
+    const concepto = document.getElementById('egreso-concepto').value.trim();
     const monto = parseFloat(document.getElementById('egreso-monto').value);
-    const detalle = document.getElementById('egreso-detalle').value;
-    if (!fecha || !concepto || !monto) return toast('Datos incompletos');
+    const detalle = document.getElementById('egreso-detalle').value.trim();
+    if (!fecha || !concepto || isNaN(monto) || monto <= 0) return toast('Datos incompletos o monto inválido');
     await addDoc(collection(db, 'egresos'), { fecha, concepto, monto, detalle });
     toast('Egreso registrado');
+    formEgreso.reset();
     loadEgresos();
     loadDashboard();
   } catch (err) {

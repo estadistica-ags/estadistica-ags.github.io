@@ -162,25 +162,46 @@
       <!-- Egresos -->
       <section id="view-egresos" class="view hidden">
         <h2 class="text-2xl font-bold mb-4">Egresos</h2>
-        <div id="form-egreso" class="mb-4 hidden">
-          <input id="egreso-fecha" type="date" class="border p-2 mr-2" />
-          <input id="egreso-concepto" type="text" placeholder="Concepto" class="border p-2 mr-2" />
-          <input id="egreso-monto" type="number" class="border p-2 mr-2 w-24" />
-          <input id="egreso-detalle" type="text" placeholder="Detalle" class="border p-2 mr-2" />
-          <button id="guardar-egreso" class="bg-green-600 text-white px-3 py-1 rounded">Guardar</button>
+        <div id="form-egreso" class="bg-white rounded-xl shadow-md p-4 mb-6 hidden">
+          <form id="egreso-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label for="egreso-fecha" class="block text-sm font-medium mb-1">Fecha</label>
+              <input id="egreso-fecha" type="date" class="w-full border rounded p-2" required />
+            </div>
+            <div>
+              <label for="egreso-monto" class="block text-sm font-medium mb-1">Monto</label>
+              <input id="egreso-monto" type="number" class="w-full border rounded p-2" min="0" step="0.01" required />
+            </div>
+            <div class="md:col-span-2">
+              <label for="egreso-concepto" class="block text-sm font-medium mb-1">Concepto</label>
+              <textarea id="egreso-concepto" class="w-full border rounded p-2" rows="3" required></textarea>
+            </div>
+            <div class="md:col-span-2">
+              <label for="egreso-detalle" class="block text-sm font-medium mb-1">Detalle (opcional)</label>
+              <input id="egreso-detalle" type="text" class="w-full border rounded p-2" />
+            </div>
+            <div class="md:col-span-2">
+              <button id="guardar-egreso" type="submit" class="bg-green-500 text-white rounded-lg px-4 py-2 shadow hover:bg-green-600 flex items-center justify-center">
+                <span class="mr-2">💾</span>Guardar
+              </button>
+            </div>
+          </form>
         </div>
-        <table class="min-w-full bg-white">
-          <thead>
-            <tr>
-              <th class="py-2">Fecha</th>
-              <th class="py-2">Concepto</th>
-              <th class="py-2">Monto</th>
-              <th class="py-2">Detalle</th>
-              <th id="egresos-acciones" class="py-2 hidden">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tabla-egresos"></tbody>
-        </table>
+        <div class="overflow-x-auto">
+          <table class="bg-white shadow rounded-lg table-auto w-full text-sm">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="px-4 py-2 text-left">Fecha</th>
+                <th class="px-4 py-2 text-left">Concepto</th>
+                <th class="px-4 py-2 text-left">Monto</th>
+                <th class="px-4 py-2 text-left">Detalle</th>
+                <th id="egresos-acciones" class="px-4 py-2 text-left hidden">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-egresos"></tbody>
+            <tfoot id="tfoot-egresos"></tfoot>
+          </table>
+        </div>
       </section>
 
       <!-- Estado de Cuenta -->
