@@ -34,6 +34,94 @@ const formatDate = iso => {
   return `${d}/${m}/${y}`;
 };
 
+// Quincena helpers
+const MONTO_QUINCENA = 30;
+
+const computeEstatus = (fechaLimite, abonado, esperado) => {
+  const hoy = new Date().toISOString().slice(0, 10);
+  if (abonado >= esperado) return 'Pagado';
+  if (fechaLimite < hoy) return abonado > 0 ? 'Incompleto' : 'Pendiente';
+  return 'Futuro';
+};
+
+const buildCalendar = (ingreso, fin) => {
+  const res = [];
+  const start = new Date(ingreso);
+  let current = new Date(start.getFullYear(), start.getMonth(), 16);
+  if (start.getDate() > 16) current = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+  const end = new Date(fin);
+  while (current <= end) {
+    const year = current.getFullYear();
+    const month = current.getMonth();
+    const qNumber = month * 2 + (current.getDate() === 16 ? 1 : 2);
+    const qId = `${year}-Q${String(qNumber).padStart(2, '0')}`;
+    res.push({
+      quincena: qId,
+      fechaLimite: current.toISOString().slice(0, 10)
+    });
+    if (current.getDate() === 16) {
+      current = new Date(year, month + 1, 0);
+    } else {
+      current = new Date(year, month + 1, 16);
+    }
+  }
+  return res;
+};
+
+const ensureQuincenas = async (id, ingreso) => {
+  const fin = new Date();
+  fin.setMonth(fin.getMonth() + 1);
+  const calendar = buildCalendar(ingreso, fin);
+  const existingSnap = await getDocs(query(collection(db, 'pagos'), where('id_integrante', '==', id)));
+  const existentes = new Set();
+  existingSnap.forEach(d => existentes.add(d.data().quincena));
+  for (const q of calendar) {
+    if (!existentes.has(q.quincena)) {
+      await addDoc(collection(db, 'pagos'), {
+        id_integrante: id,
+        quincena: q.quincena,
+        fechaLimite: q.fechaLimite,
+        montoEsperado: MONTO_QUINCENA,
+        montoAbonado: 0,
+        estatus: computeEstatus(q.fechaLimite, 0, MONTO_QUINCENA)
+      });
+    }
+  }
+};
+
+const registrarAbono = async (id, monto) => {
+  try {
+    const intDoc = await getDoc(doc(db, 'integrantes', id));
+    const ingreso = intDoc.data()?.ingreso || new Date().toISOString().slice(0, 10);
+    await ensureQuincenas(id, ingreso);
+    let restante = monto;
+    const snap = await getDocs(
+      query(collection(db, 'pagos'), where('id_integrante', '==', id), orderBy('fechaLimite'))
+    );
+    for (const d of snap.docs) {
+      if (restante <= 0) break;
+      const data = d.data();
+      const falta = data.montoEsperado - (data.montoAbonado || 0);
+      if (falta <= 0) continue;
+      const aplicar = Math.min(falta, restante);
+      restante -= aplicar;
+      const abonado = (data.montoAbonado || 0) + aplicar;
+      const estatus = computeEstatus(data.fechaLimite, abonado, data.montoEsperado);
+      await updateDoc(d.ref, { montoAbonado: abonado, estatus });
+    }
+  } catch (err) {
+    handleError(err, 'No se pudo registrar el abono');
+  }
+};
+
+const ensureAllQuincenas = async () => {
+  const snap = await getDocs(collection(db, 'integrantes'));
+  for (const d of snap.docs) {
+    const data = d.data();
+    await ensureQuincenas(d.id, data.ingreso || new Date().toISOString().slice(0, 10));
+  }
+};
+
 // Views
 const loginView = document.getElementById('login-view');
 const appView = document.getElementById('app');
@@ -117,8 +205,9 @@ async function loadRole() {
 }
 
 // Initialization after login
-function initApp() {
+async function initApp() {
   navigate();
+  await ensureAllQuincenas();
   loadDashboard();
   loadUsuarios();
   loadPagos();
@@ -148,6 +237,7 @@ function openUsuarioModal(data = null) {
     document.getElementById('usuario-rol').value = data.rol || '';
     document.getElementById('usuario-activo').value = data.activo ? 'true' : 'false';
     document.getElementById('usuario-cumple').value = data.cumple || '';
+    document.getElementById('usuario-ingreso').value = data.ingreso || '';
   } else {
     editingId = null;
     modalTitle.textContent = 'Agregar Integrante';
@@ -173,8 +263,9 @@ formUsuario?.addEventListener('submit', async e => {
   const rol = document.getElementById('usuario-rol').value;
   const activo = document.getElementById('usuario-activo').value;
   const cumple = document.getElementById('usuario-cumple').value;
-  if (!nombre || !email || !rol || !activo || !cumple) return toast('Datos incompletos');
-  const data = { nombre, email, rol, activo: activo === 'true', cumple };
+  const ingreso = document.getElementById('usuario-ingreso').value;
+  if (!nombre || !email || !rol || !activo || !cumple || !ingreso) return toast('Datos incompletos');
+  const data = { nombre, email, rol, activo: activo === 'true', cumple, ingreso };
   try {
     if (editingId) {
       await updateDoc(doc(db, 'integrantes', editingId), data);
@@ -208,7 +299,7 @@ async function loadUsuarios() {
         <td class="px-4 py-2">${d.activo ? 'Sí' : 'No'}</td>
         <td class="px-4 py-2">${formatDate(d.cumple)}</td>
         ${currentRole === 'admin' ? `<td class="px-4 py-2 space-x-2">
-            <button class="edit-usuario" data-id="${docu.id}" data-nombre="${d.nombre}" data-email="${d.email}" data-rol="${d.rol}" data-activo="${d.activo}" data-cumple="${d.cumple}">✏️</button>
+            <button class="edit-usuario" data-id="${docu.id}" data-nombre="${d.nombre}" data-email="${d.email}" data-rol="${d.rol}" data-activo="${d.activo}" data-cumple="${d.cumple}" data-ingreso="${d.ingreso}">✏️</button>
             <button class="delete-usuario" data-id="${docu.id}">🗑️</button>
           </td>` : ''}
       `;
@@ -237,7 +328,8 @@ document.getElementById('tabla-usuarios')?.addEventListener('click', async e => 
       email: target.dataset.email,
       rol: target.dataset.rol,
       activo: target.dataset.activo === 'true',
-      cumple: target.dataset.cumple
+      cumple: target.dataset.cumple,
+      ingreso: target.dataset.ingreso
     });
   } else if (target.classList.contains('delete-usuario')) {
     if (confirm('¿Eliminar integrante?')) {
@@ -258,44 +350,30 @@ async function loadPagos() {
   try {
     const tbody = document.getElementById('tabla-pagos');
     tbody.innerHTML = '';
-    const snap = await getDocs(collection(db, 'pagos'));
     const integrantes = {};
     const intSnap = await getDocs(collection(db, 'integrantes'));
-    intSnap.forEach(d => (integrantes[d.id] = d.data().nombre));
-    snap.forEach(doc => {
-      const p = doc.data();
+    for (const d of intSnap.docs) {
+      const data = d.data();
+      integrantes[d.id] = data.nombre;
+      await ensureQuincenas(d.id, data.ingreso || new Date().toISOString().slice(0, 10));
+    }
+    const snap = await getDocs(collection(db, 'pagos'));
+    for (const docu of snap.docs) {
+      const p = docu.data();
+      const estatus = computeEstatus(p.fechaLimite, p.montoAbonado || 0, p.montoEsperado);
+      if (estatus !== p.estatus) await updateDoc(docu.ref, { estatus });
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="border px-2 py-1">${integrantes[p.id_integrante] || ''}</td>
-                      <td class="border px-2 py-1">${p.quincena}</td>
-                      <td class="border px-2 py-1">${p.fechaPago}</td>
-                      <td class="border px-2 py-1">$${p.monto.toFixed(2)}</td>` +
-                      (currentRole === 'admin' ? `<td class="border px-2 py-1"><button class="edit-pago text-blue-600" data-id="${doc.id}" data-quincena="${p.quincena}" data-fecha="${p.fechaPago}" data-monto="${p.monto}">Editar</button></td>` : '');
+      tr.innerHTML = `<td class="border px-2 py-1">${integrantes[p.id_integrante] || ''}</td>` +
+                     `<td class="border px-2 py-1">${p.quincena}</td>` +
+                     `<td class="border px-2 py-1">${p.fechaLimite}</td>` +
+                     `<td class="border px-2 py-1">$${(p.montoAbonado || 0).toFixed(2)}</td>` +
+                     `<td class="border px-2 py-1">${estatus}</td>`;
       tbody.appendChild(tr);
-    });
+    }
   } catch (err) {
     handleError(err, 'No se pudieron cargar los pagos');
   }
 }
-
-document.getElementById('tabla-pagos')?.addEventListener('click', async e => {
-  if (e.target.classList.contains('edit-pago')) {
-    const { id, quincena, fecha, monto } = e.target.dataset;
-    const nuevaQuincena = prompt('Quincena', quincena);
-    if (nuevaQuincena === null) return;
-    const nuevaFecha = prompt('Fecha', fecha) || fecha;
-    const nuevoMontoStr = prompt('Monto', monto);
-    if (nuevoMontoStr === null) return;
-    const nuevoMonto = parseFloat(nuevoMontoStr);
-    try {
-      await updateDoc(doc(db, 'pagos', id), { quincena: nuevaQuincena, fechaPago: nuevaFecha, monto: nuevoMonto });
-      toast('Pago actualizado');
-      loadPagos();
-      loadDashboard();
-    } catch (err) {
-      handleError(err, 'No se pudo actualizar el pago');
-    }
-  }
-});
 
 async function loadEgresos() {
   try {
@@ -345,7 +423,7 @@ async function loadDashboard() {
     const egresosSnap = await getDocs(collection(db, 'egresos'));
     let totalPagos = 0;
     let totalEgresos = 0;
-    pagosSnap.forEach(d => (totalPagos += d.data().monto));
+    pagosSnap.forEach(d => (totalPagos += d.data().montoAbonado || 0));
     egresosSnap.forEach(d => (totalEgresos += d.data().monto));
     document.getElementById('total-ingresos').textContent = `$${totalPagos.toFixed(2)}`;
     document.getElementById('total-egresos').textContent = `$${totalEgresos.toFixed(2)}`;
@@ -395,20 +473,15 @@ const guardarPago = document.getElementById('guardar-pago');
 guardarPago?.addEventListener('click', async () => {
   try {
     const id = document.getElementById('pago-integrante').value;
-    const quincena = document.getElementById('pago-quincena').value;
-    const fecha = document.getElementById('pago-fecha').value;
     const monto = parseFloat(document.getElementById('pago-monto').value);
-    if (!id || !quincena || !fecha || !monto) return toast('Datos incompletos');
-    // prevent duplicate
-    const q = query(collection(db, 'pagos'), where('id_integrante', '==', id), where('quincena', '==', quincena));
-    const snap = await getDocs(q);
-    if (!snap.empty) return toast('Pago duplicado');
-    await addDoc(collection(db, 'pagos'), { id_integrante: id, quincena, fechaPago: fecha, monto });
-    toast('Pago registrado');
+    if (!id || !monto) return toast('Datos incompletos');
+    await registrarAbono(id, monto);
+    toast('Abono registrado');
     loadPagos();
     loadDashboard();
+    if (estadoSelect && estadoSelect.value === id) loadEstado();
   } catch (err) {
-    handleError(err, 'No se pudo registrar el pago');
+    handleError(err, 'No se pudo registrar el abono');
   }
 });
 
@@ -443,18 +516,25 @@ async function loadEstado() {
   try {
     const id = estadoSelect.value;
     if (!id) return;
+    const intDoc = await getDoc(doc(db, 'integrantes', id));
+    const ingreso = intDoc.data()?.ingreso || new Date().toISOString().slice(0, 10);
+    await ensureQuincenas(id, ingreso);
     const pagosSnap = await getDocs(
-      query(collection(db, 'pagos'), where('id_integrante', '==', id), orderBy('quincena'))
+      query(collection(db, 'pagos'), where('id_integrante', '==', id), orderBy('fechaLimite'))
     );
     let total = 0;
     const list = [];
-    pagosSnap.forEach(d => {
+    const resumen = { Pagado: 0, Pendiente: 0, Incompleto: 0, Futuro: 0 };
+    for (const d of pagosSnap.docs) {
       const p = d.data();
-      total += p.monto;
-      list.push(`<tr><td class='border px-2 py-1'>${p.quincena}</td><td class='border px-2 py-1'>${p.fechaPago}</td><td class='border px-2 py-1'>$${p.monto.toFixed(2)}</td></tr>`);
-    });
+      const estatus = computeEstatus(p.fechaLimite, p.montoAbonado || 0, p.montoEsperado);
+      if (estatus !== p.estatus) await updateDoc(d.ref, { estatus });
+      resumen[estatus]++;
+      total += p.montoAbonado || 0;
+      list.push(`<tr><td class='border px-2 py-1'>${p.quincena}</td><td class='border px-2 py-1'>${p.fechaLimite}</td><td class='border px-2 py-1'>$${(p.montoAbonado || 0).toFixed(2)}</td><td class='border px-2 py-1'>${estatus}</td></tr>`);
+    }
     const detalle = document.getElementById('estado-detalle');
-    detalle.innerHTML = `<table class='min-w-full'><thead><tr><th class='py-1'>Quincena</th><th class='py-1'>Fecha</th><th class='py-1'>Monto</th></tr></thead><tbody>${list.join('')}</tbody></table><p class='mt-2 font-semibold'>Total: $${total.toFixed(2)}</p>`;
+    detalle.innerHTML = `<table class='min-w-full'><thead><tr><th class='py-1'>Quincena</th><th class='py-1'>Fecha límite</th><th class='py-1'>Abonado</th><th class='py-1'>Estatus</th></tr></thead><tbody>${list.join('')}</tbody></table><p class='mt-2 font-semibold'>Total abonado: $${total.toFixed(2)}</p><p class='mt-2'>Pagadas: ${resumen.Pagado} | Pendientes: ${resumen.Pendiente} | Incompletas: ${resumen.Incompleto} | Futuras: ${resumen.Futuro}</p>`;
   } catch (err) {
     handleError(err, 'No se pudo cargar el estado de cuenta');
   }
