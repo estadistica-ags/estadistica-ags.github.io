@@ -71,14 +71,13 @@ const META_SALDO = 1000; // Meta mensual para barra de progreso
 const computeEstatus = (fechaLimite, abonado, esperado) => {
   const hoy = new Date().toISOString().slice(0, 10);
   if (abonado >= esperado) return 'Pagado';
-  if (fechaLimite < hoy) return abonado > 0 ? 'Incompleto' : 'Pendiente';
+  if (fechaLimite < hoy) return 'Pendiente';
   return 'Futuro';
 };
 
 const STATUS_STYLES = {
   Pagado: { icon: '✅', border: 'border-green-500', badge: 'bg-green-500' },
   Pendiente: { icon: '⏳', border: 'border-red-500', badge: 'bg-red-500' },
-  Incompleto: { icon: '🔶', border: 'border-yellow-500', badge: 'bg-yellow-500' },
   Futuro: { icon: '📅', border: 'border-gray-400', badge: 'bg-gray-400' }
 };
 
@@ -702,10 +701,6 @@ async function recalcPago(pagoId, card) {
   card.className = `pago-card bg-white rounded-lg shadow border-l-4 ${info.border}`;
 }
 
-document.getElementById('exportar-pagos')?.addEventListener('click', () => {
-  html2pdf().from(cardsPagos).save();
-});
-
 // Add egreso
 const formEgreso = document.getElementById('egreso-form');
 formEgreso?.addEventListener('submit', async e => {
@@ -730,8 +725,18 @@ const estadoSelect = document.getElementById('estado-integrante');
 const btnExportar = document.getElementById('btn-exportar');
 estadoSelect?.addEventListener('change', loadEstado);
 btnExportar?.addEventListener('click', () => {
-  const elem = document.getElementById('estado-detalle');
-  html2pdf().from(elem).save();
+  const detalle = document.getElementById('estado-detalle');
+  const nombre = integrantesMap[estadoSelect.value] || '';
+  const fecha = formatDateLong(new Date());
+  const wrapper = document.createElement('div');
+  wrapper.className = 'p-4';
+  const header = document.createElement('div');
+  header.className = 'mb-4 text-center';
+  header.innerHTML = `<h2 class="text-xl font-bold">Estado de cuenta</h2><p>${nombre} - ${fecha}</p>`;
+  wrapper.appendChild(header);
+  wrapper.appendChild(detalle.cloneNode(true));
+  document.body.appendChild(wrapper);
+  html2pdf({ margin: 10 }).from(wrapper).save().then(() => wrapper.remove());
 });
 
 async function loadEstado() {
@@ -741,7 +746,7 @@ async function loadEstado() {
     const pagosSnap = await getDocs(query(collection(db, 'pagos'), orderBy('fechaLimite')));
     let total = 0;
     const list = [];
-    const resumen = { Pagado: 0, Pendiente: 0, Incompleto: 0, Futuro: 0 };
+    const resumen = { Pagado: 0, Pendiente: 0, Futuro: 0 };
     for (const d of pagosSnap.docs) {
       const p = d.data();
       let abonado = 0;
@@ -753,7 +758,7 @@ async function loadEstado() {
       list.push(`<tr><td class='border px-2 py-1'>${p.quincena}</td><td class='border px-2 py-1'>${p.fechaLimite}</td><td class='border px-2 py-1'>$${abonado.toFixed(2)}</td><td class='border px-2 py-1'>${estatus}</td></tr>`);
     }
     const detalle = document.getElementById('estado-detalle');
-    detalle.innerHTML = `<table class='min-w-full'><thead><tr><th class='py-1'>Quincena</th><th class='py-1'>Fecha límite</th><th class='py-1'>Abonado</th><th class='py-1'>Estatus</th></tr></thead><tbody>${list.join('')}</tbody></table><p class='mt-2 font-semibold'>Total abonado: $${total.toFixed(2)}</p><p class='mt-2'>Pagadas: ${resumen.Pagado} | Pendientes: ${resumen.Pendiente} | Incompletas: ${resumen.Incompleto} | Futuras: ${resumen.Futuro}</p>`;
+    detalle.innerHTML = `<table class='min-w-full'><thead><tr><th class='py-1'>Quincena</th><th class='py-1'>Fecha límite</th><th class='py-1'>Abonado</th><th class='py-1'>Estatus</th></tr></thead><tbody>${list.join('')}</tbody></table><p class='mt-2 font-semibold'>Total abonado: $${total.toFixed(2)}</p><p class='mt-2'>Pagadas: ${resumen.Pagado} | Pendientes: ${resumen.Pendiente} | Futuras: ${resumen.Futuro}</p>`;
   } catch (err) {
     handleError(err, 'No se pudo cargar el estado de cuenta');
   }
