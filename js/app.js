@@ -20,7 +20,13 @@ import {
 
 // Helpers
 const toast = msg => {
-  Toastify({ text: msg, duration: 3000, gravity: 'top', position: 'right', backgroundColor: '#2563eb' }).showToast();
+  Toastify({
+    text: msg,
+    duration: 3000,
+    gravity: 'top',
+    position: 'right',
+    style: { background: '#2563eb' }
+  }).showToast();
 };
 
 // Generic error handler
@@ -739,7 +745,7 @@ btnExportar?.addEventListener('click', async () => {
   wrapper.appendChild(tabla);
   document.body.appendChild(wrapper);
   try {
-    await html2pdf({ margin: 10 }).from(wrapper).save();
+    await html2pdf().set({ margin: 10 }).from(wrapper).save();
   } catch (err) {
     handleError(err, 'No se pudo exportar el PDF');
   } finally {
