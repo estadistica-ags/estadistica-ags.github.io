@@ -35,6 +35,16 @@ const formatDate = iso => {
   return `${d}/${m}/${y}`;
 };
 
+const formatCumple = str => {
+  if (!str) return '';
+  if (str.includes('/')) {
+    const [d, m] = str.split('/');
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}`;
+  }
+  const parts = str.split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}` : str;
+};
+
 const formatDateLong = date => {
   if (!date) return '';
   const d = typeof date === 'string' ? new Date(date) : date;
@@ -226,7 +236,7 @@ function openUsuarioModal(data = null) {
     document.getElementById('usuario-email').value = data.email || '';
     document.getElementById('usuario-rol').value = data.rol || '';
     document.getElementById('usuario-activo').value = data.activo ? 'true' : 'false';
-    document.getElementById('usuario-cumple').value = data.cumple || '';
+    document.getElementById('usuario-cumple').value = formatCumple(data.cumple) || '';
   } else {
     editingId = null;
     modalTitle.textContent = 'Agregar Integrante';
@@ -288,7 +298,7 @@ async function loadUsuarios() {
         <p class="font-bold">${d.nombre}</p>
         <p class="text-sm"><span class="mr-1">🛡️</span>${d.rol}</p>
         <p class="text-sm"><span class="mr-1">${d.activo ? '✅' : '❌'}</span>Activo: ${d.activo ? 'Sí' : 'No'}</p>
-        <p class="text-sm"><span class="mr-1">🎂</span>${formatDate(d.cumple)}</p>
+        <p class="text-sm"><span class="mr-1">🎂</span>${formatCumple(d.cumple)}</p>
         ${currentRole === 'admin' ? `
           <div class="mt-4 flex space-x-2">
             <button class="edit-usuario flex-1 bg-blue-600 text-white py-2 rounded" data-id="${docu.id}" data-nombre="${d.nombre}" data-email="${d.email}" data-rol="${d.rol}" data-activo="${d.activo}" data-cumple="${d.cumple}">✏️ Editar</button>
@@ -543,7 +553,14 @@ async function loadCumples() {
     snap.forEach(d => {
       const data = d.data();
       if (!data.cumple) return;
-      const [year, month, day] = data.cumple.split('-').map(n => parseInt(n));
+      let day, month;
+      if (data.cumple.includes('/')) {
+        [day, month] = data.cumple.split('/').map(n => parseInt(n));
+      } else {
+        const parts = data.cumple.split('-');
+        month = parseInt(parts[1]);
+        day = parseInt(parts[2]);
+      }
       let cumple = new Date(hoy.getFullYear(), month - 1, day);
       if (cumple < hoy) cumple.setFullYear(hoy.getFullYear() + 1);
       proximos.push({ nombre: data.nombre, fecha: cumple });
