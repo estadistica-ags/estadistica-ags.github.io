@@ -46,6 +46,7 @@ const formatDateLong = iso => {
 
 // Quincena helpers
 const MONTO_QUINCENA = 30;
+const META_SALDO = 1000; // Meta mensual para barra de progreso
 
 const computeEstatus = (fechaLimite, abonado, esperado) => {
   const hoy = new Date().toISOString().slice(0, 10);
@@ -520,7 +521,11 @@ async function loadDashboard() {
     egresosSnap.forEach(d => (totalEgresos += d.data().monto));
     document.getElementById('total-ingresos').textContent = `$${totalPagos.toFixed(2)}`;
     document.getElementById('total-egresos').textContent = `$${totalEgresos.toFixed(2)}`;
-    document.getElementById('saldo').textContent = `$${(totalPagos - totalEgresos).toFixed(2)}`;
+    const saldo = totalPagos - totalEgresos;
+    document.getElementById('saldo').textContent = `$${saldo.toFixed(2)}`;
+    const progreso = Math.max(0, Math.min(100, (saldo / META_SALDO) * 100));
+    document.getElementById('saldo-progress').style.width = `${progreso}%`;
+    document.getElementById('saldo-meta').textContent = `Meta mensual: $${META_SALDO.toFixed(2)}`;
     loadCumples();
   } catch (err) {
     handleError(err, 'No se pudo cargar el dashboard');
@@ -529,8 +534,8 @@ async function loadDashboard() {
 
 async function loadCumples() {
   try {
-    const ul = document.getElementById('cumples');
-    ul.innerHTML = '';
+    const cont = document.getElementById('cumples');
+    cont.innerHTML = '';
     const snap = await getDocs(collection(db, 'integrantes'));
     const hoy = new Date();
     const proximos = [];
@@ -544,9 +549,17 @@ async function loadCumples() {
     });
     proximos.sort((a, b) => a.fecha - b.fecha);
     proximos.slice(0, 5).forEach(c => {
-      const li = document.createElement('li');
-      li.textContent = `${c.nombre} - ${formatDate(c.fecha.toISOString().slice(0,10))}`;
-      ul.appendChild(li);
+      const card = document.createElement('div');
+      card.className = 'w-full max-w-md mx-auto bg-yellow-100 rounded-xl shadow-md p-4 mb-3 flex items-center space-x-4';
+      const fechaStr = c.fecha.toISOString().slice(0, 10);
+      card.innerHTML = `
+        <span class="text-3xl">🎂</span>
+        <div>
+          <p class="font-bold">${c.nombre}</p>
+          <p class="text-sm">${formatDateLong(fechaStr)}</p>
+        </div>
+      `;
+      cont.appendChild(card);
     });
   } catch (err) {
     handleError(err, 'No se pudieron cargar los cumpleaños');

@@ -72,23 +72,41 @@
       <!-- Dashboard -->
       <section id="view-dashboard" class="view hidden">
         <h2 class="text-2xl font-bold mb-4">Dashboard</h2>
-        <div class="grid md:grid-cols-3 gap-4">
-          <div class="p-4 bg-white rounded shadow">
-            <p class="text-gray-600">Ingresos</p>
-            <p id="total-ingresos" class="text-2xl font-bold">$0</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Ingresos -->
+          <div class="w-full max-w-md mx-auto bg-green-100 rounded-xl shadow-md p-4 mb-4 flex items-center space-x-4">
+            <span class="text-4xl">💰</span>
+            <div>
+              <p class="text-xl">Ingresos</p>
+              <p id="total-ingresos" class="text-2xl font-bold">$0</p>
+            </div>
           </div>
-          <div class="p-4 bg-white rounded shadow">
-            <p class="text-gray-600">Egresos</p>
-            <p id="total-egresos" class="text-2xl font-bold">$0</p>
+          <!-- Egresos -->
+          <div class="w-full max-w-md mx-auto bg-red-100 rounded-xl shadow-md p-4 mb-4 flex items-center space-x-4">
+            <span class="text-4xl">💸</span>
+            <div>
+              <p class="text-xl">Egresos</p>
+              <p id="total-egresos" class="text-2xl font-bold">$0</p>
+            </div>
           </div>
-          <div class="p-4 bg-white rounded shadow">
-            <p class="text-gray-600">Saldo</p>
-            <p id="saldo" class="text-2xl font-bold">$0</p>
+          <!-- Saldo -->
+          <div class="w-full max-w-md mx-auto bg-blue-100 rounded-xl shadow-md p-4 mb-4 flex items-center space-x-4">
+            <span class="text-4xl">💼</span>
+            <div class="flex-1">
+              <p class="text-xl">Saldo</p>
+              <p id="saldo" class="text-2xl font-bold">$0</p>
+              <div class="mt-2">
+                <div class="w-full bg-blue-200 rounded-full h-2">
+                  <div id="saldo-progress" class="h-2 bg-blue-600 rounded-full" style="width:0%"></div>
+                </div>
+                <p id="saldo-meta" class="text-xs text-blue-700 mt-1"></p>
+              </div>
+            </div>
           </div>
         </div>
         <div class="mt-8">
           <h3 class="font-semibold mb-2">Próximos cumpleaños</h3>
-          <ul id="cumples" class="list-disc ml-6"></ul>
+          <div id="cumples" class="space-y-3"></div>
         </div>
       </section>
 
