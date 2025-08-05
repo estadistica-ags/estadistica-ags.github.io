@@ -149,27 +149,17 @@
       </div>
 
       <!-- Pagos -->
-      <section id="view-pagos" class="view hidden">
+      <section id="view-pagos" class="view hidden pb-24">
         <h2 class="text-2xl font-bold mb-4">Pagos</h2>
-        <div id="form-pago" class="mb-4 hidden">
-          <select id="pago-integrante" class="border p-2 mr-2"></select>
-          <input id="pago-fecha" type="date" class="border p-2 mr-2" />
-          <input id="pago-monto" type="number" class="border p-2 mr-2 w-24" />
-          <button id="guardar-pago" class="bg-green-600 text-white px-3 py-1 rounded">Guardar</button>
+        <div id="cards-pagos" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+        <button id="ver-mas" class="mt-4 w-full bg-blue-600 text-white py-2 rounded hidden">Ver más</button>
+        <div id="barra-abono-global" class="hidden fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+          <div class="flex justify-center">
+            <button id="btn-abono-global" class="bg-blue-600 text-white px-4 py-2 rounded-full flex items-center space-x-2">
+              <span class="text-xl">+</span><span>Registrar abono global</span>
+            </button>
+          </div>
         </div>
-        <table class="min-w-full bg-white">
-          <thead>
-            <tr>
-              <th class="py-2">Integrante</th>
-              <th class="py-2">Quincena</th>
-              <th class="py-2">Fecha límite</th>
-              <th class="py-2">Abonado</th>
-              <th class="py-2">Estatus</th>
-              <th id="pagos-acciones" class="py-2 hidden">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tabla-pagos"></tbody>
-        </table>
       </section>
 
       <!-- Egresos -->
@@ -205,6 +195,38 @@
         </div>
         <div id="estado-detalle" class="bg-white p-4 rounded shadow"></div>
       </section>
+
+      <!-- Modales de pagos -->
+      <div id="modal-detalle" class="fixed inset-0 bg-black/40 hidden items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+          <h3 class="text-xl font-bold mb-4">Historial de abonos</h3>
+          <ul id="lista-historial" class="space-y-2"></ul>
+          <button id="cerrar-detalle" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded">Cerrar</button>
+        </div>
+      </div>
+
+      <div id="modal-abono" class="fixed inset-0 bg-black/40 hidden items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+          <h3 class="text-xl font-bold mb-4">Registrar abono</h3>
+          <input id="input-abono" type="number" class="border p-2 w-full mb-4" placeholder="Monto" />
+          <div class="flex justify-end space-x-2">
+            <button id="abono-cancelar" class="px-4 py-2 border rounded">Cancelar</button>
+            <button id="abono-guardar" class="px-4 py-2 bg-green-600 text-white rounded">Guardar</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="modal-abono-global" class="fixed inset-0 bg-black/40 hidden items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+          <h3 class="text-xl font-bold mb-4">Registrar abono global</h3>
+          <select id="select-integrante" class="border p-2 w-full mb-4"></select>
+          <input id="monto-global" type="number" class="border p-2 w-full mb-4" placeholder="Monto" />
+          <div class="flex justify-end space-x-2">
+            <button id="global-cancelar" class="px-4 py-2 border rounded">Cancelar</button>
+            <button id="global-guardar" class="px-4 py-2 bg-green-600 text-white rounded">Guardar</button>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 

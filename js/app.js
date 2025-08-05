@@ -34,6 +34,15 @@ const formatDate = iso => {
   return `${d}/${m}/${y}`;
 };
 
+const formatDateLong = iso => {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+};
+
 // Quincena helpers
 const MONTO_QUINCENA = 30;
 
@@ -42,6 +51,13 @@ const computeEstatus = (fechaLimite, abonado, esperado) => {
   if (abonado >= esperado) return 'Pagado';
   if (fechaLimite < hoy) return abonado > 0 ? 'Incompleto' : 'Pendiente';
   return 'Futuro';
+};
+
+const STATUS_STYLES = {
+  Pagado: { icon: '✅', border: 'border-green-500', badge: 'bg-green-500' },
+  Pendiente: { icon: '⏳', border: 'border-red-500', badge: 'bg-red-500' },
+  Incompleto: { icon: '🔶', border: 'border-yellow-500', badge: 'bg-yellow-500' },
+  Futuro: { icon: '📅', border: 'border-gray-400', badge: 'bg-gray-400' }
 };
 
 const buildCalendar = (ingreso, fin) => {
@@ -114,6 +130,20 @@ const registrarAbono = async (id, monto) => {
   }
 };
 
+const abonarQuincena = async (pagoId, monto) => {
+  try {
+    const ref = doc(db, 'pagos', pagoId);
+    const snap = await getDoc(ref);
+    const data = snap.data();
+    const abonado = (data.montoAbonado || 0) + monto;
+    const estatus = computeEstatus(data.fechaLimite, abonado, data.montoEsperado);
+    await updateDoc(ref, { montoAbonado: abonado, estatus });
+  } catch (err) {
+    handleError(err, 'No se pudo registrar el abono');
+    throw err;
+  }
+};
+
 const ensureAllQuincenas = async () => {
   const snap = await getDocs(collection(db, 'integrantes'));
   for (const d of snap.docs) {
@@ -137,6 +167,19 @@ const menuClose = document.getElementById('menu-close');
 
 let currentUser = null;
 let currentRole = 'consulta';
+
+let pagosData = [];
+let pagosMostrados = 0;
+let pagoSeleccionado = null;
+let integrantesMap = {};
+
+const cardsPagos = document.getElementById('cards-pagos');
+const verMasBtn = document.getElementById('ver-mas');
+const barraAbonoGlobal = document.getElementById('barra-abono-global');
+const btnAbonoGlobal = document.getElementById('btn-abono-global');
+const modalDetalle = document.getElementById('modal-detalle');
+const modalAbono = document.getElementById('modal-abono');
+const modalAbonoGlobal = document.getElementById('modal-abono-global');
 
 // Modal elements for gestión de integrantes
 const modalUsuario = document.getElementById('modal-usuario');
@@ -218,11 +261,9 @@ async function initApp() {
 
 function setupForms() {
   if (currentRole === 'admin') {
-    document.getElementById('form-pago').classList.remove('hidden');
     document.getElementById('form-egreso').classList.remove('hidden');
     document.getElementById('btn-add-usuario').classList.remove('hidden');
     document.getElementById('usuarios-acciones').classList.remove('hidden');
-    document.getElementById('pagos-acciones').classList.remove('hidden');
     document.getElementById('egresos-acciones').classList.remove('hidden');
   }
 }
@@ -348,30 +389,71 @@ document.getElementById('tabla-usuarios')?.addEventListener('click', async e => 
 // Pagos
 async function loadPagos() {
   try {
-    const tbody = document.getElementById('tabla-pagos');
-    tbody.innerHTML = '';
-    const integrantes = {};
+    cardsPagos.innerHTML = '';
+    pagosData = [];
+    pagosMostrados = 0;
+    integrantesMap = {};
     const intSnap = await getDocs(collection(db, 'integrantes'));
     for (const d of intSnap.docs) {
       const data = d.data();
-      integrantes[d.id] = data.nombre;
+      integrantesMap[d.id] = data.nombre;
       await ensureQuincenas(d.id, data.ingreso || new Date().toISOString().slice(0, 10));
     }
+    const selGlobal = document.getElementById('select-integrante');
+    if (selGlobal) {
+      selGlobal.innerHTML = '<option value="">Integrante</option>';
+      Object.entries(integrantesMap).forEach(([id, nombre]) => {
+        selGlobal.innerHTML += `<option value="${id}">${nombre}</option>`;
+      });
+    }
     const snap = await getDocs(collection(db, 'pagos'));
-    for (const docu of snap.docs) {
+    snap.forEach(docu => {
       const p = docu.data();
       const estatus = computeEstatus(p.fechaLimite, p.montoAbonado || 0, p.montoEsperado);
-      if (estatus !== p.estatus) await updateDoc(docu.ref, { estatus });
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="border px-2 py-1">${integrantes[p.id_integrante] || ''}</td>` +
-                     `<td class="border px-2 py-1">${p.quincena}</td>` +
-                     `<td class="border px-2 py-1">${p.fechaLimite}</td>` +
-                     `<td class="border px-2 py-1">$${(p.montoAbonado || 0).toFixed(2)}</td>` +
-                     `<td class="border px-2 py-1">${estatus}</td>`;
-      tbody.appendChild(tr);
+      if (estatus !== p.estatus) updateDoc(docu.ref, { estatus });
+      pagosData.push({ id: docu.id, ...p, estatus });
+    });
+    pagosData.sort((a, b) => new Date(a.fechaLimite) - new Date(b.fechaLimite));
+    renderPagos();
+    barraAbonoGlobal?.classList.remove('hidden');
+    if (currentRole === 'consulta') {
+      btnAbonoGlobal?.setAttribute('disabled', 'true');
+      btnAbonoGlobal?.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+      btnAbonoGlobal?.removeAttribute('disabled');
+      btnAbonoGlobal?.classList.remove('opacity-50', 'cursor-not-allowed');
     }
   } catch (err) {
     handleError(err, 'No se pudieron cargar los pagos');
+  }
+}
+
+function renderPagos() {
+  const frag = document.createDocumentFragment();
+  const slice = pagosData.slice(pagosMostrados, pagosMostrados + 10);
+  slice.forEach(p => {
+    const info = STATUS_STYLES[p.estatus] || STATUS_STYLES.Futuro;
+    const card = document.createElement('div');
+    card.className = `relative bg-white rounded-lg shadow p-4 border-l-4 ${info.border}`;
+    card.innerHTML = `
+      <span class="absolute top-2 right-2 text-xs text-white px-2 py-1 rounded ${info.badge}">${p.estatus}</span>
+      <div class="flex items-center mb-2"><span class="text-2xl mr-2">${info.icon}</span><h3 class="font-bold">${p.quincena}</h3></div>
+      <p class="text-sm text-gray-600 mb-1">Fecha límite: ${formatDateLong(p.fechaLimite)}</p>
+      <p class="text-sm text-gray-600 mb-1">Monto esperado: $${p.montoEsperado.toFixed(2)}</p>
+      <p class="text-sm text-gray-600 mb-2">Monto abonado: $${(p.montoAbonado || 0).toFixed(2)}</p>
+      <div class="flex space-x-2">
+        <button data-id="${p.id}" class="ver-detalle bg-blue-500 text-white px-2 py-1 rounded text-sm">👁 Ver detalle</button>
+        <button data-id="${p.id}" class="abonar bg-green-500 text-white px-2 py-1 rounded text-sm ${currentRole === 'consulta' ? 'opacity-50 cursor-not-allowed' : ''}" ${currentRole === 'consulta' ? 'disabled' : ''}>➕ Abonar</button>
+      </div>
+    `;
+    frag.appendChild(card);
+  });
+  cardsPagos.appendChild(frag);
+  pagosMostrados += slice.length;
+  if (pagosMostrados < pagosData.length) {
+    verMasBtn.classList.remove('hidden');
+  } else {
+    verMasBtn.classList.add('hidden');
   }
 }
 
@@ -468,18 +550,65 @@ async function loadCumples() {
   }
 }
 
-// Add payment
-const guardarPago = document.getElementById('guardar-pago');
-guardarPago?.addEventListener('click', async () => {
+// Pagos interactions
+cardsPagos?.addEventListener('click', e => {
+  const id = e.target.dataset.id;
+  if (e.target.classList.contains('ver-detalle')) {
+    const pago = pagosData.find(p => p.id === id);
+    if (pago) {
+      const ul = document.getElementById('lista-historial');
+      ul.innerHTML = `<li>Abonado actual: $${(pago.montoAbonado || 0).toFixed(2)}</li>`;
+      modalDetalle.classList.remove('hidden');
+    }
+  } else if (e.target.classList.contains('abonar') && currentRole !== 'consulta') {
+    pagoSeleccionado = id;
+    document.getElementById('input-abono').value = '';
+    modalAbono.classList.remove('hidden');
+  }
+});
+
+verMasBtn?.addEventListener('click', renderPagos);
+
+document.getElementById('cerrar-detalle')?.addEventListener('click', () => modalDetalle.classList.add('hidden'));
+modalDetalle?.addEventListener('click', e => { if (e.target === modalDetalle) modalDetalle.classList.add('hidden'); });
+
+document.getElementById('abono-cancelar')?.addEventListener('click', () => modalAbono.classList.add('hidden'));
+modalAbono?.addEventListener('click', e => { if (e.target === modalAbono) modalAbono.classList.add('hidden'); });
+
+document.getElementById('abono-guardar')?.addEventListener('click', async () => {
+  const monto = parseFloat(document.getElementById('input-abono').value);
+  if (!monto) return toast('Monto inválido');
   try {
-    const id = document.getElementById('pago-integrante').value;
-    const monto = parseFloat(document.getElementById('pago-monto').value);
-    if (!id || !monto) return toast('Datos incompletos');
-    await registrarAbono(id, monto);
+    await abonarQuincena(pagoSeleccionado, monto);
     toast('Abono registrado');
+    modalAbono.classList.add('hidden');
     loadPagos();
     loadDashboard();
-    if (estadoSelect && estadoSelect.value === id) loadEstado();
+    if (estadoSelect && estadoSelect.value) loadEstado();
+  } catch (err) {
+    handleError(err, 'No se pudo registrar el abono');
+  }
+});
+
+btnAbonoGlobal?.addEventListener('click', () => {
+  document.getElementById('monto-global').value = '';
+  modalAbonoGlobal.classList.remove('hidden');
+});
+
+document.getElementById('global-cancelar')?.addEventListener('click', () => modalAbonoGlobal.classList.add('hidden'));
+modalAbonoGlobal?.addEventListener('click', e => { if (e.target === modalAbonoGlobal) modalAbonoGlobal.classList.add('hidden'); });
+
+document.getElementById('global-guardar')?.addEventListener('click', async () => {
+  const id = document.getElementById('select-integrante').value;
+  const monto = parseFloat(document.getElementById('monto-global').value);
+  if (!id || !monto) return toast('Datos incompletos');
+  try {
+    await registrarAbono(id, monto);
+    toast('Abono registrado');
+    modalAbonoGlobal.classList.add('hidden');
+    loadPagos();
+    loadDashboard();
+    if (estadoSelect && estadoSelect.value) loadEstado();
   } catch (err) {
     handleError(err, 'No se pudo registrar el abono');
   }
