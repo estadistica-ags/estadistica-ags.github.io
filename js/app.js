@@ -210,7 +210,6 @@ function setupForms() {
   if (currentRole === 'admin') {
     document.getElementById('form-egreso').classList.remove('hidden');
     document.getElementById('btn-add-usuario').classList.remove('hidden');
-    document.getElementById('usuarios-acciones').classList.remove('hidden');
     document.getElementById('egresos-acciones').classList.remove('hidden');
     btnAddPago?.classList.remove('hidden');
   }
@@ -272,32 +271,30 @@ formUsuario?.addEventListener('submit', async e => {
 // Usuarios
 async function loadUsuarios() {
   try {
-    const tbody = document.getElementById('tabla-usuarios');
-    tbody.innerHTML = '';
+    const cont = document.getElementById('lista-usuarios');
+    cont.innerHTML = '';
     const snap = await getDocs(collection(db, 'integrantes'));
-    snap.forEach(docu => {
-      const d = docu.data();
-      const tr = document.createElement('tr');
-      tr.className = 'border-b odd:bg-white even:bg-gray-50';
-      tr.innerHTML = `
-        <td class="px-4 py-2">${d.nombre}</td>
-        <td class="px-4 py-2">${d.email}</td>
-        <td class="px-4 py-2">${d.rol}</td>
-        <td class="px-4 py-2">${d.activo ? 'Sí' : 'No'}</td>
-        <td class="px-4 py-2">${formatDate(d.cumple)}</td>
-        ${currentRole === 'admin' ? `<td class="px-4 py-2 space-x-2">
-            <button class="edit-usuario" data-id="${docu.id}" data-nombre="${d.nombre}" data-email="${d.email}" data-rol="${d.rol}" data-activo="${d.activo}" data-cumple="${d.cumple}">✏️</button>
-            <button class="delete-usuario" data-id="${docu.id}">🗑️</button>
-          </td>` : ''}
-      `;
-      tbody.appendChild(tr);
-    });
     const selPago = document.getElementById('pago-integrante');
     const selEstado = document.getElementById('estado-integrante');
     if (selPago) selPago.innerHTML = '<option value="">Integrante</option>';
     if (selEstado) selEstado.innerHTML = '';
     snap.forEach(docu => {
       const d = docu.data();
+      const card = document.createElement('div');
+      card.className = 'bg-white rounded-xl shadow-md p-4 mb-3 w-full max-w-md mx-auto';
+      card.innerHTML = `
+        <p class="font-bold">${d.nombre}</p>
+        <p class="text-sm"><span class="mr-1">🛡️</span>${d.rol}</p>
+        <p class="text-sm"><span class="mr-1">${d.activo ? '✅' : '❌'}</span>Activo: ${d.activo ? 'Sí' : 'No'}</p>
+        <p class="text-sm"><span class="mr-1">🎂</span>${formatDate(d.cumple)}</p>
+        ${currentRole === 'admin' ? `
+          <div class="mt-4 flex space-x-2">
+            <button class="edit-usuario flex-1 bg-blue-600 text-white py-2 rounded" data-id="${docu.id}" data-nombre="${d.nombre}" data-email="${d.email}" data-rol="${d.rol}" data-activo="${d.activo}" data-cumple="${d.cumple}">✏️ Editar</button>
+            <button class="delete-usuario flex-1 bg-red-600 text-white py-2 rounded" data-id="${docu.id}">🗑 Eliminar</button>
+          </div>
+        ` : ''}
+      `;
+      cont.appendChild(card);
       if (selPago) selPago.innerHTML += `<option value="${docu.id}">${d.nombre}</option>`;
       if (selEstado) selEstado.innerHTML += `<option value="${docu.id}">${d.nombre}</option>`;
     });
@@ -306,7 +303,7 @@ async function loadUsuarios() {
   }
 }
 
-document.getElementById('tabla-usuarios')?.addEventListener('click', async e => {
+document.getElementById('lista-usuarios')?.addEventListener('click', async e => {
   const target = e.target;
   if (target.classList.contains('edit-usuario')) {
     openUsuarioModal({
