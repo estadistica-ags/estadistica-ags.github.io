@@ -229,7 +229,6 @@ function openUsuarioModal(data = null) {
     document.getElementById('usuario-rol').value = data.rol || '';
     document.getElementById('usuario-activo').value = data.activo ? 'true' : 'false';
     document.getElementById('usuario-cumple').value = data.cumple || '';
-    document.getElementById('usuario-ingreso').value = data.ingreso || '';
   } else {
     editingId = null;
     modalTitle.textContent = 'Agregar Integrante';
@@ -255,9 +254,8 @@ formUsuario?.addEventListener('submit', async e => {
   const rol = document.getElementById('usuario-rol').value;
   const activo = document.getElementById('usuario-activo').value;
   const cumple = document.getElementById('usuario-cumple').value;
-  const ingreso = document.getElementById('usuario-ingreso').value;
-  if (!nombre || !email || !rol || !activo || !cumple || !ingreso) return toast('Datos incompletos');
-  const data = { nombre, email, rol, activo: activo === 'true', cumple, ingreso };
+  if (!nombre || !email || !rol || !activo || !cumple) return toast('Datos incompletos');
+  const data = { nombre, email, rol, activo: activo === 'true', cumple };
   try {
     if (editingId) {
       await updateDoc(doc(db, 'integrantes', editingId), data);
@@ -291,7 +289,7 @@ async function loadUsuarios() {
         <td class="px-4 py-2">${d.activo ? 'Sí' : 'No'}</td>
         <td class="px-4 py-2">${formatDate(d.cumple)}</td>
         ${currentRole === 'admin' ? `<td class="px-4 py-2 space-x-2">
-            <button class="edit-usuario" data-id="${docu.id}" data-nombre="${d.nombre}" data-email="${d.email}" data-rol="${d.rol}" data-activo="${d.activo}" data-cumple="${d.cumple}" data-ingreso="${d.ingreso}">✏️</button>
+            <button class="edit-usuario" data-id="${docu.id}" data-nombre="${d.nombre}" data-email="${d.email}" data-rol="${d.rol}" data-activo="${d.activo}" data-cumple="${d.cumple}">✏️</button>
             <button class="delete-usuario" data-id="${docu.id}">🗑️</button>
           </td>` : ''}
       `;
@@ -320,8 +318,7 @@ document.getElementById('tabla-usuarios')?.addEventListener('click', async e => 
       email: target.dataset.email,
       rol: target.dataset.rol,
       activo: target.dataset.activo === 'true',
-      cumple: target.dataset.cumple,
-      ingreso: target.dataset.ingreso
+      cumple: target.dataset.cumple
     });
   } else if (target.classList.contains('delete-usuario')) {
     if (confirm('¿Eliminar integrante?')) {
@@ -373,7 +370,7 @@ formQuincena?.addEventListener('submit', async e => {
   const monto = parseFloat(document.getElementById('quincena-monto').value) || MONTO_QUINCENA;
   if (!id || !fecha) return toast('Datos incompletos');
   try {
-    const usuariosSnap = await getDocs(query(collection(db, 'usuarios'), where('activo', '==', true)));
+    const usuariosSnap = await getDocs(query(collection(db, 'integrantes'), where('activo', '==', true)));
     const montoEsperado = usuariosSnap.size * monto;
     if (editingPago) {
       const ref = doc(db, 'pagos', editingPago);
@@ -407,7 +404,8 @@ async function loadPagos() {
     pagosData = [];
     pagosMostrados = 0;
     integrantesMap = {};
-    const usuariosSnap = await getDocs(query(collection(db, 'usuarios'), where('activo', '==', true)));
+    const usuariosSnap = await getDocs(query(collection(db, 'integrantes'), where('activo', '==', true)));
+    const activeUsers = usuariosSnap.size;
     usuariosSnap.forEach(d => {
       const data = d.data();
       integrantesMap[d.id] = data.nombre;
@@ -422,9 +420,15 @@ async function loadPagos() {
     const snap = await getDocs(collection(db, 'pagos'));
     snap.forEach(docu => {
       const p = docu.data();
-      const estatus = computeEstatus(p.fechaLimite, p.montoAbonado || 0, p.montoEsperado);
+      const montoPorUsuario = p.montoPorUsuario || MONTO_QUINCENA;
+      let montoEsperado = p.montoEsperado;
+      if (!montoEsperado) {
+        montoEsperado = activeUsers * montoPorUsuario;
+        updateDoc(docu.ref, { montoEsperado });
+      }
+      const estatus = computeEstatus(p.fechaLimite, p.montoAbonado || 0, montoEsperado);
       if (estatus !== p.estatus) updateDoc(docu.ref, { estatus });
-      pagosData.push({ id: docu.id, ...p, estatus });
+      pagosData.push({ id: docu.id, ...p, montoPorUsuario, montoEsperado, estatus });
     });
     pagosData.sort((a, b) => new Date(a.fechaLimite) - new Date(b.fechaLimite));
     renderPagos();
