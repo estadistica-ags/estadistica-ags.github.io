@@ -724,7 +724,7 @@ formEgreso?.addEventListener('submit', async e => {
 const estadoSelect = document.getElementById('estado-integrante');
 const btnExportar = document.getElementById('btn-exportar');
 estadoSelect?.addEventListener('change', loadEstado);
-btnExportar?.addEventListener('click', () => {
+btnExportar?.addEventListener('click', async () => {
   const detalle = document.getElementById('estado-detalle');
   const nombre = integrantesMap[estadoSelect.value] || '';
   const fecha = formatDateLong(new Date());
@@ -734,9 +734,17 @@ btnExportar?.addEventListener('click', () => {
   header.className = 'mb-4 text-center';
   header.innerHTML = `<h2 class="text-xl font-bold">Estado de cuenta</h2><p>${nombre} - ${fecha}</p>`;
   wrapper.appendChild(header);
-  wrapper.appendChild(detalle.cloneNode(true));
+  const tabla = detalle.cloneNode(true);
+  tabla.id = '';
+  wrapper.appendChild(tabla);
   document.body.appendChild(wrapper);
-  html2pdf({ margin: 10 }).from(wrapper).save().then(() => wrapper.remove());
+  try {
+    await html2pdf({ margin: 10 }).from(wrapper).save();
+  } catch (err) {
+    handleError(err, 'No se pudo exportar el PDF');
+  } finally {
+    wrapper.remove();
+  }
 });
 
 async function loadEstado() {
