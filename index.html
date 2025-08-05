@@ -142,7 +142,7 @@
               <option value="true">Sí</option>
               <option value="false">No</option>
             </select>
-            <input id="usuario-cumple" type="date" class="w-full border p-2 rounded" required />
+            <input id="usuario-cumple" type="text" pattern="^(0[1-9]|[12][0-9]|3[01])/(0[1-9]|1[0-2])$" placeholder="DD/MM" class="w-full border p-2 rounded" required />
             <button type="submit" class="w-full bg-green-600 text-white py-2 rounded">Guardar</button>
           </form>
         </div>
