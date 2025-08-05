@@ -120,11 +120,8 @@ let integrantesMap = {};
 
 const cardsPagos = document.getElementById('cards-pagos');
 const verMasBtn = document.getElementById('ver-mas');
-const barraAbonoGlobal = document.getElementById('barra-abono-global');
-const btnAbonoGlobal = document.getElementById('btn-abono-global');
 const modalDetalle = document.getElementById('modal-detalle');
 const modalAbono = document.getElementById('modal-abono');
-const modalAbonoGlobal = document.getElementById('modal-abono-global');
 const btnAddPago = document.getElementById('btn-add-pago');
 const modalQuincena = document.getElementById('modal-quincena');
 const formQuincena = document.getElementById('form-quincena');
@@ -432,14 +429,6 @@ async function loadPagos() {
     });
     pagosData.sort((a, b) => new Date(a.fechaLimite) - new Date(b.fechaLimite));
     renderPagos();
-    barraAbonoGlobal?.classList.remove('hidden');
-    if (currentRole === 'consulta') {
-      btnAbonoGlobal?.setAttribute('disabled', 'true');
-      btnAbonoGlobal?.classList.add('opacity-50', 'cursor-not-allowed');
-    } else {
-      btnAbonoGlobal?.removeAttribute('disabled');
-      btnAbonoGlobal?.classList.remove('opacity-50', 'cursor-not-allowed');
-    }
   } catch (err) {
     handleError(err, 'No se pudieron cargar los pagos');
   }
