@@ -60,60 +60,59 @@ const STATUS_STYLES = {
   Futuro: { icon: '📅', border: 'border-gray-400', badge: 'bg-gray-400' }
 };
 
-const buildCalendar = (ingreso, fin) => {
+const buildAnnualCalendar = year => {
   const res = [];
-  const start = new Date(ingreso);
-  let current = new Date(start.getFullYear(), start.getMonth(), 16);
-  if (start.getDate() > 16) current = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-  const end = new Date(fin);
-  while (current <= end) {
-    const year = current.getFullYear();
-    const month = current.getMonth();
-    const qNumber = month * 2 + (current.getDate() === 16 ? 1 : 2);
-    const qId = `${year}-Q${String(qNumber).padStart(2, '0')}`;
+  for (let m = 0; m < 12; m++) {
+    const first = new Date(year, m, 16);
+    const last = new Date(year, m + 1, 0);
     res.push({
-      quincena: qId,
-      fechaLimite: current.toISOString().slice(0, 10)
+      quincena: `${year}-Q${String(m * 2 + 1).padStart(2, '0')}`,
+      fechaLimite: first.toISOString().slice(0, 10)
     });
-    if (current.getDate() === 16) {
-      current = new Date(year, month + 1, 0);
-    } else {
-      current = new Date(year, month + 1, 16);
-    }
+    res.push({
+      quincena: `${year}-Q${String(m * 2 + 2).padStart(2, '0')}`,
+      fechaLimite: last.toISOString().slice(0, 10)
+    });
   }
   return res;
 };
 
-const ensureQuincenas = async (id, ingreso) => {
-  const fin = new Date();
-  fin.setMonth(fin.getMonth() + 1);
-  const calendar = buildCalendar(ingreso, fin);
-  const existingSnap = await getDocs(query(collection(db, 'pagos'), where('id_integrante', '==', id)));
+const ensureQuincenasYear = async year => {
+  const calendar = buildAnnualCalendar(year);
+  const existingSnap = await getDocs(collection(db, 'pagos'));
   const existentes = new Set();
   existingSnap.forEach(d => existentes.add(d.data().quincena));
+  const usuariosSnap = await getDocs(query(collection(db, 'usuarios'), where('activo', '==', true)));
+  const montoEsperado = usuariosSnap.size * MONTO_QUINCENA;
   for (const q of calendar) {
     if (!existentes.has(q.quincena)) {
       await addDoc(collection(db, 'pagos'), {
-        id_integrante: id,
         quincena: q.quincena,
         fechaLimite: q.fechaLimite,
-        montoEsperado: MONTO_QUINCENA,
+        montoEsperado,
         montoAbonado: 0,
-        estatus: computeEstatus(q.fechaLimite, 0, MONTO_QUINCENA)
+        estatus: computeEstatus(q.fechaLimite, 0, montoEsperado)
       });
     }
   }
 };
 
-const registrarAbono = async (id, monto) => {
+const registrarAbonoQuincena = async (pagoId, abono) => {
+  const ref = doc(db, 'pagos', pagoId);
+  await addDoc(collection(ref, 'abonos'), abono);
+  const snap = await getDoc(ref);
+  const data = snap.data();
+  const abonado = (data.montoAbonado || 0) + abono.monto;
+  const estatus = computeEstatus(data.fechaLimite, abonado, data.montoEsperado);
+  await updateDoc(ref, { montoAbonado: abonado, estatus });
+};
+
+const registrarAbono = async (usuarioId, monto) => {
   try {
-    const intDoc = await getDoc(doc(db, 'integrantes', id));
-    const ingreso = intDoc.data()?.ingreso || new Date().toISOString().slice(0, 10);
-    await ensureQuincenas(id, ingreso);
     let restante = monto;
-    const snap = await getDocs(
-      query(collection(db, 'pagos'), where('id_integrante', '==', id), orderBy('fechaLimite'))
-    );
+    const nombre = integrantesMap[usuarioId] || '';
+    const hoy = new Date().toISOString().slice(0, 10);
+    const snap = await getDocs(query(collection(db, 'pagos'), orderBy('fechaLimite')));
     for (const d of snap.docs) {
       if (restante <= 0) break;
       const data = d.data();
@@ -121,34 +120,17 @@ const registrarAbono = async (id, monto) => {
       if (falta <= 0) continue;
       const aplicar = Math.min(falta, restante);
       restante -= aplicar;
-      const abonado = (data.montoAbonado || 0) + aplicar;
-      const estatus = computeEstatus(data.fechaLimite, abonado, data.montoEsperado);
-      await updateDoc(d.ref, { montoAbonado: abonado, estatus });
+      const tipo = data.fechaLimite > hoy ? 'anticipado' : 'quincenal';
+      await registrarAbonoQuincena(d.id, {
+        id_usuario: usuarioId,
+        nombre,
+        monto: aplicar,
+        fecha: new Date().toISOString(),
+        tipo
+      });
     }
   } catch (err) {
     handleError(err, 'No se pudo registrar el abono');
-  }
-};
-
-const abonarQuincena = async (pagoId, monto) => {
-  try {
-    const ref = doc(db, 'pagos', pagoId);
-    const snap = await getDoc(ref);
-    const data = snap.data();
-    const abonado = (data.montoAbonado || 0) + monto;
-    const estatus = computeEstatus(data.fechaLimite, abonado, data.montoEsperado);
-    await updateDoc(ref, { montoAbonado: abonado, estatus });
-  } catch (err) {
-    handleError(err, 'No se pudo registrar el abono');
-    throw err;
-  }
-};
-
-const ensureAllQuincenas = async () => {
-  const snap = await getDocs(collection(db, 'integrantes'));
-  for (const d of snap.docs) {
-    const data = d.data();
-    await ensureQuincenas(d.id, data.ingreso || new Date().toISOString().slice(0, 10));
   }
 };
 
@@ -250,7 +232,6 @@ async function loadRole() {
 // Initialization after login
 async function initApp() {
   navigate();
-  await ensureAllQuincenas();
   loadDashboard();
   loadUsuarios();
   loadPagos();
@@ -393,19 +374,21 @@ async function loadPagos() {
     pagosData = [];
     pagosMostrados = 0;
     integrantesMap = {};
-    const intSnap = await getDocs(collection(db, 'integrantes'));
-    for (const d of intSnap.docs) {
+    const usuariosSnap = await getDocs(query(collection(db, 'usuarios'), where('activo', '==', true)));
+    usuariosSnap.forEach(d => {
       const data = d.data();
       integrantesMap[d.id] = data.nombre;
-      await ensureQuincenas(d.id, data.ingreso || new Date().toISOString().slice(0, 10));
-    }
+    });
     const selGlobal = document.getElementById('select-integrante');
     if (selGlobal) {
-      selGlobal.innerHTML = '<option value="">Integrante</option>';
+      selGlobal.innerHTML = '<option value="">Usuario</option>';
       Object.entries(integrantesMap).forEach(([id, nombre]) => {
         selGlobal.innerHTML += `<option value="${id}">${nombre}</option>`;
       });
     }
+    const year = new Date().getFullYear();
+    await ensureQuincenasYear(year);
+    await ensureQuincenasYear(year + 1);
     const snap = await getDocs(collection(db, 'pagos'));
     snap.forEach(docu => {
       const p = docu.data();
@@ -440,7 +423,8 @@ function renderPagos() {
       <div class="flex items-center mb-2"><span class="text-2xl mr-2">${info.icon}</span><h3 class="font-bold">${p.quincena}</h3></div>
       <p class="text-sm text-gray-600 mb-1">Fecha límite: ${formatDateLong(p.fechaLimite)}</p>
       <p class="text-sm text-gray-600 mb-1">Monto esperado: $${p.montoEsperado.toFixed(2)}</p>
-      <p class="text-sm text-gray-600 mb-2">Monto abonado: $${(p.montoAbonado || 0).toFixed(2)}</p>
+      <p class="text-sm text-gray-600">Monto abonado: $${(p.montoAbonado || 0).toFixed(2)}</p>
+      <div class="w-full bg-gray-200 h-2 rounded mb-2"><div class="h-2 bg-green-500" style="width:${Math.min(100, ((p.montoAbonado||0)/p.montoEsperado)*100)}%"></div></div>
       <div class="flex space-x-2">
         <button data-id="${p.id}" class="ver-detalle bg-blue-500 text-white px-2 py-1 rounded text-sm">👁 Ver detalle</button>
         <button data-id="${p.id}" class="abonar bg-green-500 text-white px-2 py-1 rounded text-sm ${currentRole === 'consulta' ? 'opacity-50 cursor-not-allowed' : ''}" ${currentRole === 'consulta' ? 'disabled' : ''}>➕ Abonar</button>
@@ -554,15 +538,28 @@ async function loadCumples() {
 cardsPagos?.addEventListener('click', e => {
   const id = e.target.dataset.id;
   if (e.target.classList.contains('ver-detalle')) {
-    const pago = pagosData.find(p => p.id === id);
-    if (pago) {
-      const ul = document.getElementById('lista-historial');
-      ul.innerHTML = `<li>Abonado actual: $${(pago.montoAbonado || 0).toFixed(2)}</li>`;
+    const ul = document.getElementById('lista-historial');
+    ul.innerHTML = '';
+    getDocs(collection(db, 'pagos', id, 'abonos')).then(snap => {
+      snap.forEach(a => {
+        const d = a.data();
+        const li = document.createElement('li');
+        li.textContent = `${d.fecha.slice(0,10)} - ${d.nombre}: $${d.monto.toFixed(2)} (${d.tipo})`;
+        ul.appendChild(li);
+      });
       modalDetalle.classList.remove('hidden');
-    }
+    });
   } else if (e.target.classList.contains('abonar') && currentRole !== 'consulta') {
     pagoSeleccionado = id;
+    const sel = document.getElementById('abono-usuario');
+    if (sel) {
+      sel.innerHTML = '<option value="">Usuario</option>';
+      Object.entries(integrantesMap).forEach(([uid, nombre]) => {
+        sel.innerHTML += `<option value="${uid}">${nombre}</option>`;
+      });
+    }
     document.getElementById('input-abono').value = '';
+    document.getElementById('abono-tipo').value = 'quincenal';
     modalAbono.classList.remove('hidden');
   }
 });
@@ -570,6 +567,10 @@ cardsPagos?.addEventListener('click', e => {
 verMasBtn?.addEventListener('click', renderPagos);
 
 document.getElementById('cerrar-detalle')?.addEventListener('click', () => modalDetalle.classList.add('hidden'));
+document.getElementById('exportar-detalle')?.addEventListener('click', () => {
+  const elem = document.getElementById('lista-historial');
+  html2pdf().from(elem).save();
+});
 modalDetalle?.addEventListener('click', e => { if (e.target === modalDetalle) modalDetalle.classList.add('hidden'); });
 
 document.getElementById('abono-cancelar')?.addEventListener('click', () => modalAbono.classList.add('hidden'));
@@ -577,9 +578,17 @@ modalAbono?.addEventListener('click', e => { if (e.target === modalAbono) modalA
 
 document.getElementById('abono-guardar')?.addEventListener('click', async () => {
   const monto = parseFloat(document.getElementById('input-abono').value);
-  if (!monto) return toast('Monto inválido');
+  const usuario = document.getElementById('abono-usuario').value;
+  const tipo = document.getElementById('abono-tipo').value;
+  if (!monto || !usuario) return toast('Datos incompletos');
   try {
-    await abonarQuincena(pagoSeleccionado, monto);
+    await registrarAbonoQuincena(pagoSeleccionado, {
+      id_usuario: usuario,
+      nombre: integrantesMap[usuario] || '',
+      monto,
+      fecha: new Date().toISOString(),
+      tipo
+    });
     toast('Abono registrado');
     modalAbono.classList.add('hidden');
     loadPagos();
@@ -645,22 +654,19 @@ async function loadEstado() {
   try {
     const id = estadoSelect.value;
     if (!id) return;
-    const intDoc = await getDoc(doc(db, 'integrantes', id));
-    const ingreso = intDoc.data()?.ingreso || new Date().toISOString().slice(0, 10);
-    await ensureQuincenas(id, ingreso);
-    const pagosSnap = await getDocs(
-      query(collection(db, 'pagos'), where('id_integrante', '==', id), orderBy('fechaLimite'))
-    );
+    const pagosSnap = await getDocs(query(collection(db, 'pagos'), orderBy('fechaLimite')));
     let total = 0;
     const list = [];
     const resumen = { Pagado: 0, Pendiente: 0, Incompleto: 0, Futuro: 0 };
     for (const d of pagosSnap.docs) {
       const p = d.data();
-      const estatus = computeEstatus(p.fechaLimite, p.montoAbonado || 0, p.montoEsperado);
-      if (estatus !== p.estatus) await updateDoc(d.ref, { estatus });
+      let abonado = 0;
+      const abonosSnap = await getDocs(query(collection(db, 'pagos', d.id, 'abonos'), where('id_usuario', '==', id)));
+      abonosSnap.forEach(a => (abonado += a.data().monto));
+      const estatus = computeEstatus(p.fechaLimite, abonado, MONTO_QUINCENA);
       resumen[estatus]++;
-      total += p.montoAbonado || 0;
-      list.push(`<tr><td class='border px-2 py-1'>${p.quincena}</td><td class='border px-2 py-1'>${p.fechaLimite}</td><td class='border px-2 py-1'>$${(p.montoAbonado || 0).toFixed(2)}</td><td class='border px-2 py-1'>${estatus}</td></tr>`);
+      total += abonado;
+      list.push(`<tr><td class='border px-2 py-1'>${p.quincena}</td><td class='border px-2 py-1'>${p.fechaLimite}</td><td class='border px-2 py-1'>$${abonado.toFixed(2)}</td><td class='border px-2 py-1'>${estatus}</td></tr>`);
     }
     const detalle = document.getElementById('estado-detalle');
     detalle.innerHTML = `<table class='min-w-full'><thead><tr><th class='py-1'>Quincena</th><th class='py-1'>Fecha límite</th><th class='py-1'>Abonado</th><th class='py-1'>Estatus</th></tr></thead><tbody>${list.join('')}</tbody></table><p class='mt-2 font-semibold'>Total abonado: $${total.toFixed(2)}</p><p class='mt-2'>Pagadas: ${resumen.Pagado} | Pendientes: ${resumen.Pendiente} | Incompletas: ${resumen.Incompleto} | Futuras: ${resumen.Futuro}</p>`;
