@@ -35,9 +35,10 @@ const formatDate = iso => {
   return `${d}/${m}/${y}`;
 };
 
-const formatDateLong = iso => {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString('es-ES', {
+const formatDateLong = date => {
+  if (!date) return '';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('es-ES', {
     day: '2-digit',
     month: 'long',
     year: 'numeric'
@@ -551,12 +552,11 @@ async function loadCumples() {
     proximos.slice(0, 5).forEach(c => {
       const card = document.createElement('div');
       card.className = 'w-full max-w-md mx-auto bg-yellow-100 rounded-xl shadow-md p-4 mb-3 flex items-center space-x-4';
-      const fechaStr = c.fecha.toISOString().slice(0, 10);
       card.innerHTML = `
         <span class="text-3xl">🎂</span>
         <div>
           <p class="font-bold">${c.nombre}</p>
-          <p class="text-sm">${formatDateLong(fechaStr)}</p>
+          <p class="text-sm">${formatDateLong(c.fecha)}</p>
         </div>
       `;
       cont.appendChild(card);
