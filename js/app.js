@@ -521,14 +521,6 @@ async function loadDashboard() {
     document.getElementById('total-ingresos').textContent = `$${totalPagos.toFixed(2)}`;
     document.getElementById('total-egresos').textContent = `$${totalEgresos.toFixed(2)}`;
     document.getElementById('saldo').textContent = `$${(totalPagos - totalEgresos).toFixed(2)}`;
-    const ctx = document.getElementById('chart');
-    new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: ['Ingresos', 'Egresos'],
-        datasets: [{ data: [totalPagos, totalEgresos], backgroundColor: ['#16a34a', '#dc2626'] }]
-      }
-    });
     loadCumples();
   } catch (err) {
     handleError(err, 'No se pudo cargar el dashboard');
