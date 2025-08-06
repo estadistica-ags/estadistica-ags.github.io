@@ -62,6 +62,12 @@ const formatDateLong = (date, includeYear = true) => {
     : `${day} de ${monthCap}`;
 };
 
+const formatMoney = amount =>
+  '$' + Number(amount || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  });
+
 const getConceptIcon = concept => {
   const c = concept?.toLowerCase() || '';
   if (c.includes('pastel')) return '🎂';
@@ -475,8 +481,8 @@ function renderPagos() {
         <div>
           <h3 class="font-bold">${p.quincena}</h3>
           <p class="text-sm text-gray-600">Fecha límite: ${formatDateLong(p.fechaLimite)}</p>
-          <p class="text-sm text-gray-600">Monto esperado: $${p.montoEsperado.toFixed(2)}</p>
-          <p class="text-sm text-gray-600 monto-abonado">Monto abonado: $${(p.montoAbonado || 0).toFixed(2)}</p>
+          <p class="text-sm text-gray-600">Monto esperado: ${formatMoney(p.montoEsperado)}</p>
+          <p class="text-sm text-gray-600 monto-abonado">Monto abonado: ${formatMoney(p.montoAbonado || 0)}</p>
         </div>
         <div class="flex items-center space-x-2">
           <span class="badge text-xs text-white px-2 py-1 rounded ${info.badge}">${p.estatus}</span>
@@ -512,14 +518,14 @@ async function loadEgresos() {
       tr.innerHTML =
         `<td class="px-4 py-2">${e.fecha}</td>` +
         `<td class="px-4 py-2 flex items-center"><span class="mr-1">${icon}</span>${e.concepto}</td>` +
-        `<td class="px-4 py-2">$${e.monto.toFixed(2)}</td>` +
+        `<td class="px-4 py-2">${formatMoney(e.monto)}</td>` +
         (currentRole === 'admin'
           ? `<td class="px-4 py-2 space-x-2"><button class="edit-egreso text-blue-600" data-id="${doc.id}" data-fecha="${e.fecha}" data-concepto="${e.concepto}" data-monto="${e.monto}">✏️</button><button class="delete-egreso text-red-600" data-id="${doc.id}">🗑</button></td>`
           : '');
       tbody.appendChild(tr);
     });
     const tfoot = document.getElementById('tfoot-egresos');
-    tfoot.innerHTML = `<tr class="font-semibold"><td colspan="2" class="px-4 py-2 text-right">Total</td><td class="px-4 py-2">$${total.toFixed(2)}</td>${currentRole === 'admin' ? '<td></td>' : ''}</tr>`;
+    tfoot.innerHTML = `<tr class="font-semibold"><td colspan="2" class="px-4 py-2 text-right">Total</td><td class="px-4 py-2">${formatMoney(total)}</td>${currentRole === 'admin' ? '<td></td>' : ''}</tr>`;
   } catch (err) {
     handleError(err, 'No se pudieron cargar los egresos');
   }
@@ -564,13 +570,13 @@ async function loadDashboard() {
     let totalEgresos = 0;
     pagosSnap.forEach(d => (totalPagos += d.data().montoAbonado || 0));
     egresosSnap.forEach(d => (totalEgresos += d.data().monto));
-    document.getElementById('total-ingresos').textContent = `$${totalPagos.toFixed(2)}`;
-    document.getElementById('total-egresos').textContent = `$${totalEgresos.toFixed(2)}`;
+    document.getElementById('total-ingresos').textContent = formatMoney(totalPagos);
+    document.getElementById('total-egresos').textContent = formatMoney(totalEgresos);
     const saldo = totalPagos - totalEgresos;
-    document.getElementById('saldo').textContent = `$${saldo.toFixed(2)}`;
+    document.getElementById('saldo').textContent = formatMoney(saldo);
     const progreso = Math.max(0, Math.min(100, (saldo / META_SALDO) * 100));
     document.getElementById('saldo-progress').style.width = `${progreso}%`;
-    document.getElementById('saldo-meta').textContent = `Meta mensual: $${META_SALDO.toFixed(2)}`;
+    document.getElementById('saldo-meta').textContent = `Meta mensual: ${formatMoney(META_SALDO)}`;
     loadCumples();
   } catch (err) {
     handleError(err, 'No se pudo cargar el dashboard');
@@ -681,7 +687,7 @@ async function toggleUsuarios(card, pago) {
       <div class="flex items-center justify-between py-2 border-b last:border-b-0">
         <div>
           <p class="font-medium">${nombre}</p>
-          ${abono ? `<p class="text-xs text-gray-500">$${abono.monto.toFixed(2)} - ${formatDate(abono.fecha.slice(0,10))}</p>` : '<p class="text-xs text-gray-400">Pendiente</p>'}
+          ${abono ? `<p class="text-xs text-gray-500">${formatMoney(abono.monto)} - ${formatDate(abono.fecha.slice(0,10))}</p>` : '<p class="text-xs text-gray-400">Pendiente</p>'}
         </div>
         <input type="checkbox" class="toggle-pago" data-uid="${uid}" ${abono ? 'checked' : ''}/>
       </div>
@@ -700,7 +706,7 @@ async function recalcPago(pagoId, card) {
   const estatus = computeEstatus(data.fechaLimite, montoAbonado, data.montoEsperado);
   await updateDoc(ref, { montoAbonado, estatus });
   const info = STATUS_STYLES[estatus] || STATUS_STYLES.Futuro;
-  card.querySelector('.monto-abonado').textContent = `Monto abonado: $${montoAbonado.toFixed(2)}`;
+  card.querySelector('.monto-abonado').textContent = `Monto abonado: ${formatMoney(montoAbonado)}`;
   const badge = card.querySelector('.badge');
   badge.textContent = estatus;
   badge.className = `badge text-xs text-white px-2 py-1 rounded ${info.badge}`;
@@ -769,10 +775,10 @@ async function loadEstado() {
       const estatus = computeEstatus(p.fechaLimite, abonado, p.montoPorUsuario || MONTO_QUINCENA);
       resumen[estatus]++;
       total += abonado;
-      list.push(`<tr><td class='border px-2 py-1'>${p.quincena}</td><td class='border px-2 py-1'>${p.fechaLimite}</td><td class='border px-2 py-1'>$${abonado.toFixed(2)}</td><td class='border px-2 py-1'>${estatus}</td></tr>`);
+      list.push(`<tr><td class='border px-2 py-1'>${p.quincena}</td><td class='border px-2 py-1'>${p.fechaLimite}</td><td class='border px-2 py-1'>${formatMoney(abonado)}</td><td class='border px-2 py-1'>${estatus}</td></tr>`);
     }
     const detalle = document.getElementById('estado-detalle');
-    detalle.innerHTML = `<table class='min-w-full'><thead><tr><th class='py-1'>Quincena</th><th class='py-1'>Fecha límite</th><th class='py-1'>Abonado</th><th class='py-1'>Estatus</th></tr></thead><tbody>${list.join('')}</tbody></table><p class='mt-2 font-semibold'>Total abonado: $${total.toFixed(2)}</p><p class='mt-2'>Pagadas: ${resumen.Pagado} | Pendientes: ${resumen.Pendiente} | Futuras: ${resumen.Futuro}</p>`;
+    detalle.innerHTML = `<table class='min-w-full'><thead><tr><th class='py-1'>Quincena</th><th class='py-1'>Fecha límite</th><th class='py-1'>Abonado</th><th class='py-1'>Estatus</th></tr></thead><tbody>${list.join('')}</tbody></table><p class='mt-2 font-semibold'>Total abonado: ${formatMoney(total)}</p><p class='mt-2'>Pagadas: ${resumen.Pagado} | Pendientes: ${resumen.Pendiente} | Futuras: ${resumen.Futuro}</p>`;
   } catch (err) {
     handleError(err, 'No se pudo cargar el estado de cuenta');
   }
