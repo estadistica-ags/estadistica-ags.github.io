@@ -507,7 +507,7 @@ async function loadEgresos() {
   try {
     const tbody = document.getElementById('tabla-egresos');
     tbody.innerHTML = '';
-    const snap = await getDocs(collection(db, 'egresos'));
+    const snap = await getDocs(query(collection(db, 'egresos'), orderBy('fecha', 'desc')));
     let total = 0;
     snap.forEach(doc => {
       const e = doc.data();
